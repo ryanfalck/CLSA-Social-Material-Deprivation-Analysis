@@ -1,0 +1,2087 @@
+---
+title: "CLSA - Social and Material Deprivation Analysis"
+author: "Ryan S. Falck & John R. Best"
+date: "2023-03-05"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This document contains all code and output for our analysis examining age and sex differences in the associations of social and material deprivation on cognitive function, and whether these relationships are moderated by physical activity. All analyses were conducted by Ryan S. Falck and John R. Best.
+
+
+All pre-processing can be found on GitHub (https://github.com/ryanfalck/CLSA-Social-Material-Deprivation-Analysis). 
+
+# 1) Initial set-up
+
+```{r}
+setwd("~/Desktop/UBC-Postdoctoral Fellowship/SFU CLSA Project")
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(gtsummary, lavaan, ggthemes, patchwork, semPlot,semTools, pastecs, Hmisc, psych, readxl,tidyverse,tidySEM)
+
+data <- read_excel("Combined_data_Processed_Jan31,2023.xlsx")
+
+Baseline<- subset(data, Timepoint == "Baseline")
+FU1<- subset(data, Timepoint == "FU1")
+
+Baseline_v2<- Baseline %>% 
+  mutate(Age = scale(AGE_NMBR,scale=FALSE)/10,
+         Female = recode(SEX_ASK,
+                         `F` = 0.5,
+                         `M` = -0.5),
+         White = recode(SDC_CULT_WH,
+                        `0` = -0.5,
+                        `1` = 0.5),
+         BMI = HWT_DBMI,
+         Multimorbidity = Chronic,
+         Material_deprivation = (MSDYY_MFS),
+         Social_deprivation = (MSDYY_SFS),
+         Active_environment = (ALE16_06),
+         Physical_activity = (PASE_total)/100,
+         Social_isolation = (SII),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11 - median(ED_UDR11,na.rm=TRUE),
+         Income = INC_TOT - median(INC_TOT,na.rm=TRUE),
+         Language_BL = as.numeric(factor(startlanguage,
+                                         levels = c("en","fr"),
+                                         labels = c("English","French"))),
+         Depression = DEP_CESD10 - median(DEP_CESD10,na.rm=TRUE),
+         Smoking =  median(SMK_DSTY,na.rm=TRUE) - SMK_DSTY,
+         Alcohol =  median(ALC_FREQ,na.rm=TRUE) - ALC_FREQ,
+         Agebin = case_when(AGE_NMBR <= 64 ~ "45-64",
+                            AGE_NMBR > 64 ~ "65+"),
+         Verbal_Fluency_Liberal = COG_AFT_SCORE_2,
+         Verbal_Fluency_Conservative = COG_AFT_SCORE_2,
+         RVLT_Immediate = COG_REYI_SCORE,
+         RVLT_Delayed = COG_REYII_SCORE,
+         MAT_Score = COG_MAT_SCORE,
+         Education_cat = case_when(ED_UDR11<=3 ~ "Less than High School Diploma",
+                                   ED_UDR11==4 ~ "High School Diploma",
+                                   ED_UDR11>4 & ED_UDR11<=8 ~ "Some College",
+                                   ED_UDR11>8 ~ "University Degree or Higher"),
+         Income_cat = case_when(INC_TOT==1 ~ "<$20k",
+                                INC_TOT==2 ~ "$20k-$50k",
+                                INC_TOT==3 ~ "$50k-$100k",
+                                INC_TOT==4 ~ "$100k-$150k",
+                                INC_TOT==5 ~ ">$150k"),
+         Smoking_cat = case_when(SMK_DSTY == 1 ~ "Daily Smoker",
+                                 SMK_DSTY == 2 | SMK_DSTY == 3 ~ "Occasional Smoker",
+                                 SMK_DSTY == 4 | SMK_DSTY == 5 ~ "Former Smoker",
+                                 SMK_DSTY == 6 ~ "Non-Smoker"),
+         Alcohol_cat = case_when(ALC_FREQ == 1 ~ "Almost everyday",
+                                 ALC_FREQ == 2 ~ "4-5x/week",
+                                 ALC_FREQ == 3 ~ "2-3x/week",
+                                 ALC_FREQ == 4 ~ "1x/week",
+                                 ALC_FREQ == 5 ~ "2-3x/month",
+                                 ALC_FREQ == 6 ~ "1x/month",
+                                 ALC_FREQ == 7 ~ "<1x/month",
+                                 ALC_FREQ == 96 ~ "Never")
+  )
+
+
+FU1_v2<- FU1 %>% 
+  mutate(Age = scale(AGE_NMBR,scale=FALSE)/10,
+         Female = recode(SEX_ASK,
+                         `F` = 0.5,
+                         `M` = -0.5),
+         White = recode(SDC_CULT_WH,
+                        `0` = -0.5,
+                        `1` = 0.5),
+         BMI = HWT_DBMI,
+         Multimorbidity = Chronic,
+         Material_deprivation = (MSDYY_MFS),
+         Social_deprivation = (MSDYY_SFS),
+         Active_environment = (ALE16_06),
+         Physical_activity = (PASE_total)/100,
+         Social_isolation = (SII),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11 - median(ED_UDR11,na.rm=TRUE),
+         Income = INC_TOT - median(INC_TOT,na.rm=TRUE),
+         Language_BL = as.numeric(factor(startlanguage,
+                                         levels = c("en","fr"),
+                                         labels = c("English","French"))),
+         Depression = DEP_CESD10 - median(DEP_CESD10,na.rm=TRUE),
+         Smoking =  median(SMK_DSTY,na.rm=TRUE) - SMK_DSTY,
+         Alcohol =  median(ALC_FREQ,na.rm=TRUE) - ALC_FREQ,
+         Agebin = case_when(AGE_NMBR <= 64 ~ "45-64",
+                            AGE_NMBR > 64 ~ "65+"),
+         Verbal_Fluency_Liberal = COG_AFT_SCORE_2,
+         Verbal_Fluency_Conservative = COG_AFT_SCORE_2,
+         RVLT_Immediate = COG_REYI_SCORE,
+         RVLT_Delayed = COG_REYII_SCORE,
+         MAT_Score = COG_MAT_SCORE,
+         Education_cat = case_when(ED_UDR11<=3 ~ "Less than High School Diploma",
+                                   ED_UDR11==4 ~ "High School Diploma",
+                                   ED_UDR11>4 & ED_UDR11<=8 ~ "Some College",
+                                   ED_UDR11>8 ~ "University Degree or Higher"),
+         Income_cat = case_when(INC_TOT==1 ~ "<$20k",
+                                INC_TOT==2 ~ "$20k-$50k",
+                                INC_TOT==3 ~ "$50k-$100k",
+                                INC_TOT==4 ~ "$100k-$150k",
+                                INC_TOT==5 ~ ">$150k"),
+         Smoking_cat = case_when(SMK_DSTY == 1 ~ "Daily Smoker",
+                                 SMK_DSTY == 2 | SMK_DSTY == 3 ~ "Occasional Smoker",
+                                 SMK_DSTY == 4 | SMK_DSTY == 5 ~ "Former Smoker",
+                                 SMK_DSTY == 6 ~ "Non-Smoker"),
+         Alcohol_cat = case_when(ALC_FREQ == 1 ~ "Almost everyday",
+                                 ALC_FREQ == 2 ~ "4-5x/week",
+                                 ALC_FREQ == 3 ~ "2-3x/week",
+                                 ALC_FREQ == 4 ~ "1x/week",
+                                 ALC_FREQ == 5 ~ "2-3x/month",
+                                 ALC_FREQ == 6 ~ "1x/month",
+                                 ALC_FREQ == 7 ~ "<1x/month",
+                                 ALC_FREQ == 96 ~ "Never")
+  )
+
+
+colnames(Baseline_v2) <- paste(colnames(Baseline_v2),"BL",sep=".")
+colnames(FU1_v2) <- paste(colnames(FU1_v2),"FU1",sep=".")
+
+Baseline_v3<-rename(Baseline_v2, c("entity_id"="entity_id.BL"))
+wide.data <- left_join(Baseline_v3,FU1_v2,by=c("entity_id"="entity_id.FU1"))
+```
+
+For this analysis, we excluded rural participants (N=8,112)
+```{r}
+wide.data2 <- wide.data %>%
+  ungroup() %>%
+  filter(SDC_URBAN_RURAL.BL!=0,
+         !SDC_URBAN_RURAL.FU1%in%c(-88888,0))
+```
+
+We then excluded individuals who moved from baseline to follow-up (N= 1,627). Our final sample size was thus N= 41,599
+```{r}
+#Identify movers from baseline to follow-up
+Mover_IDS <- wide.data2$entity_id[(wide.data2$SDC_URBAN_RURAL.BL==wide.data2$SDC_URBAN_RURAL.FU1)==FALSE] 
+Mover_IDS <- Mover_IDS[!is.na(Mover_IDS)]
+
+#Exclude Movers sample (N= 41599)
+wide.data3 <- wide.data2 %>%
+  ungroup() %>%
+  filter(!entity_id%in%Mover_IDS)
+```
+
+# 2) Baseline Descriptive Statistics
+
+Baseline tables exclude participants from rural areas and individuals who moved from baseline to follow-up.
+```{r}
+Baseline.table<-wide.data2
+
+Baseline.table %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Material_deprivation = (MSDYY_MFS.BL),
+         Social_deprivation = (MSDYY_SFS.BL),
+         Active_environment = (ALE16_06.BL),
+         Physical_activity = (PASE_total.BL)/100,
+         Social_isolation = (SII.BL),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median(ED_UDR11.BL,na.rm=TRUE),
+         Income = INC_TOT.BL - median(INC_TOT.BL,na.rm=TRUE),
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("English","French"))),
+         Depression = DEP_CESD10.BL - median(DEP_CESD10.BL,na.rm=TRUE),
+         Smoking =  median(SMK_DSTY.BL,na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol =  median(ALC_FREQ.BL,na.rm=TRUE) - ALC_FREQ.BL,
+         Agebin = case_when(AGE_NMBR.BL <= 64 ~ "45-64",
+                            AGE_NMBR.BL > 64 ~ "65+"),
+         Verbal_Fluency_Liberal = COG_AFT_SCORE_2.BL,
+         Verbal_Fluency_Conservative = COG_AFT_SCORE_2.BL,
+         RVLT_Immediate = COG_REYI_SCORE.BL,
+         RVLT_Delayed = COG_REYII_SCORE.BL,
+         MAT_Score = COG_MAT_SCORE.BL,
+         Education_cat = case_when(ED_UDR11.BL<=3 ~ "Less than High School Diploma",
+                                   ED_UDR11.BL==4 ~ "High School Diploma",
+                                   ED_UDR11.BL>4 & ED_UDR11.BL<=8 ~ "Some College",
+                                   ED_UDR11.BL>8 ~ "University Degree or Higher"),
+         Income_cat = case_when(INC_TOT.BL==1 ~ "<$20k",
+                                INC_TOT.BL==2 ~ "$20k-$50k",
+                                INC_TOT.BL==3 ~ "$50k-$100k",
+                                INC_TOT.BL==4 ~ "$100k-$150k",
+                                INC_TOT.BL==5 ~ ">$150k"),
+         Smoking_cat = case_when(SMK_DSTY.BL == 1 ~ "Daily Smoker",
+                                 SMK_DSTY.BL == 2 | SMK_DSTY.BL == 3 ~ "Occasional Smoker",
+                                 SMK_DSTY.BL == 4 | SMK_DSTY.BL == 5 ~ "Former Smoker",
+                                 SMK_DSTY.BL == 6 ~ "Non-Smoker"),
+         Alcohol_cat = case_when(ALC_FREQ.BL == 1 ~ "Almost everyday",
+                                 ALC_FREQ.BL == 2 ~ "4-5x/week",
+                                 ALC_FREQ.BL == 3 ~ "2-3x/week",
+                                 ALC_FREQ.BL == 4 ~ "1x/week",
+                                 ALC_FREQ.BL == 5 ~ "2-3x/month",
+                                 ALC_FREQ.BL == 6 ~ "1x/month",
+                                 ALC_FREQ.BL == 7 ~ "<1x/month",
+                                 ALC_FREQ.BL == 96 ~ "Never"),
+         Air_pollution = Air_pollution.BL
+  ) %>% 
+  select(AGE_NMBR.BL,
+         SEX_ASK.BL,
+         SDC_CULT_WH.BL,
+         Education_cat,
+         Income_cat,
+         Air_pollution,
+         Material_deprivation,
+         Social_deprivation,
+         Alcohol_cat,
+         Smoking_cat,
+         PASE_total.BL,
+         BMI,
+         Multimorbidity,
+         DEP_CESD10.BL,
+         Social_isolation,
+         Verbal_Fluency_Liberal,
+         Verbal_Fluency_Conservative,
+         RVLT_Immediate,
+         RVLT_Delayed,
+         MAT_Score,
+         Age_sex
+  ) %>% 
+  tbl_summary(
+    by = Age_sex
+  ) %>% 
+  as_flex_table()
+```
+
+
+# 3) Structural Equation Model: Initial Models
+
+Empty Model
+```{r}
+mdl0 <- '
+
+#measurement model - loadings are fixed to be invariant over time
+EF_BL =~ a*Verbal_Fluency_Conservative.BL + b*MAT_Score.BL
+EF_FU1 =~ a*Verbal_Fluency_Conservative.FU1 + b*MAT_Score.FU1
+
+MEM_BL =~ c*COG_REYII_SCORE.BL + d*COG_REYI_SCORE.BL
+MEM_FU1 =~ c*COG_REYII_SCORE.FU1 + d*COG_REYI_SCORE.FU1
+
+#specify mean of latent scores
+EF_BL ~ 1
+EF_FU1 ~ 0*1
+
+MEM_BL ~ 1
+MEM_FU1 ~ 0*1
+
+#specify variance of latent scores
+EF_BL ~~ g*EF_BL
+EF_FU1 ~~ 0*EF_FU1
+
+MEM_BL ~~ h*MEM_BL
+MEM_FU1 ~~ 0*MEM_FU1
+
+#specify intercept of observed scores
+Verbal_Fluency_Conservative.BL ~ 0*1
+Verbal_Fluency_Conservative.FU1 ~ 0*1
+MAT_Score.BL ~ 0*1
+MAT_Score.FU1 ~ 0*1
+COG_REYII_SCORE.BL ~ 0*1
+COG_REYII_SCORE.FU1 ~ 0*1
+COG_REYI_SCORE.BL ~ 0*1
+COG_REYI_SCORE.FU1 ~ 0*1
+
+#allow residuals in indicators to correlate over time
+Verbal_Fluency_Conservative.BL ~~ Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ MAT_Score.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.FU1
+COG_REYII_SCORE.BL ~~ COG_REYII_SCORE.FU1
+
+#specify variances of observed variables
+Verbal_Fluency_Conservative.BL ~~ i*Verbal_Fluency_Conservative.BL
+Verbal_Fluency_Conservative.FU1 ~~ i*Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ j*MAT_Score.BL
+MAT_Score.FU1 ~~ j*MAT_Score.FU1
+COG_REYII_SCORE.BL ~~ k*COG_REYII_SCORE.BL
+COG_REYII_SCORE.FU1 ~~ k*COG_REYII_SCORE.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.BL
+COG_REYI_SCORE.FU1 ~~ 0*COG_REYI_SCORE.FU1
+
+#specify autoregressions of latent variables
+EF_FU1 ~ 1*EF_BL
+MEM_FU1 ~ 1*MEM_BL
+
+#specify latent change score
+EF_DELTA =~ 1*EF_FU1
+MEM_DELTA =~ 1*MEM_FU1
+
+#specify latent change score mean and variance
+EF_DELTA ~ 1
+EF_DELTA ~~ EF_DELTA
+
+MEM_DELTA ~ 1
+MEM_DELTA ~~ MEM_DELTA
+
+#specify proportional change component
+EF_DELTA ~~ EF_BL
+MEM_DELTA ~~ MEM_BL
+
+#cross-domain covariance
+EF_DELTA ~~ MEM_BL
+MEM_DELTA ~~ EF_BL
+EF_BL ~~ MEM_BL
+'
+
+mdl0_fit <- wide.data2 %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex)
+         ) %>%
+  group_by(Age_sex) %>%
+  mutate(Age_BL = scale (AGE_NMBR.BL, scale=FALSE) / 10,
+         Age_FU1 = scale (AGE_NMBR.FU1,scale=FALSE)/10,
+         White = recode ( SDC_CULT_WH.BL,
+                          '0' = -0.5,
+                          '1' = 0.5),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Physical_activity = (PASE_total.BL - median (PASE_total.BL, na.rm=TRUE)) /100,
+         Material_deprivation = (MSDYY_MFS.BL - median (MSDYY_MFS.BL, na.rm=TRUE)) ,
+         Social_deprivation = (MSDYY_SFS.BL - median (MSDYY_SFS.BL, na.rm=TRUE) ),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median (ED_UDR11.BL, na.rm=TRUE),
+         Income = INC_TOT.BL - median (INC_TOT.BL, na.rm=TRUE) ,
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("'English", "French"))),
+         Language_FU1 = as.numeric(factor (startlanguage.FU1,
+         levels = c("en", "fr"),
+         labels = c("English", "French"))),
+         Depression = DEP_CESD10.BL - median (DEP_CESD10.BL, na.rm=TRUE),
+         Smoking = median (SMK_DSTY.BL, na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol = median (ALC_FREQ.BL, na.rm=TRUE) - ALC_FREQ.BL,
+         Air_pollution = Air_pollution.BL,
+         MatINT = Material_deprivation*Physical_activity,
+         SocINT = Social_deprivation*Physical_activity
+  ) %>%
+  ungroup() %>%
+  cfa(mdl0,
+      data = .,
+      missing = "ML",
+      fixed.x = FALSE)
+fitMeasures(mdl0_fit, c("cfi","tli","rmsea","srmr"))
+parameterEstimates(mdl0_fit,standardized=TRUE,output="text",fmi=TRUE,remove.nonfree=TRUE)
+```
+
+
+Empty Model with separate age groups (45-64 years; 65+ years)
+```{r}
+mdl0_multi <- '
+#measurement model - loadings are fixed to be invariant over time
+EF_BL =~ c(a1,a2)*Verbal_Fluency_Conservative.BL + c(b1,b2)*MAT_Score.BL
+EF_FU1 =~ c(a1,a2)*Verbal_Fluency_Conservative.FU1 + c(b1,b2)*MAT_Score.FU1
+
+MEM_BL =~ c(c1,c2)*COG_REYII_SCORE.BL + c(d1,d2)*COG_REYI_SCORE.BL
+MEM_FU1 =~ c(c1,c2)*COG_REYII_SCORE.FU1 + c(d1,d2)*COG_REYI_SCORE.FU1
+
+#specify mean of latent scores
+EF_BL ~ c(e1,e2)*1
+EF_FU1 ~ 0*1
+
+MEM_BL ~ c(f1,f2)*1
+MEM_FU1 ~ 0*1
+
+#specify variance of latent scores
+EF_BL ~~ c(g1,g2)*EF_BL
+EF_FU1 ~~ 0*EF_FU1
+
+MEM_BL ~~ c(h1,h2)*MEM_BL
+MEM_FU1 ~~ 0*MEM_FU1
+
+#specify intercept of observed scores
+Verbal_Fluency_Conservative.BL ~ 0*1
+Verbal_Fluency_Conservative.FU1 ~ 0*1
+MAT_Score.BL ~ 0*1
+MAT_Score.FU1 ~ 0*1
+COG_REYII_SCORE.BL ~ 0*1
+COG_REYII_SCORE.FU1 ~ 0*1
+COG_REYI_SCORE.BL ~ 0*1
+COG_REYI_SCORE.FU1 ~ 0*1
+
+#allow residuals in indicators to correlate over time
+Verbal_Fluency_Conservative.BL ~~ Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ MAT_Score.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.FU1
+COG_REYII_SCORE.BL ~~ COG_REYII_SCORE.FU1
+
+#specify variances of observed variables
+Verbal_Fluency_Conservative.BL ~~ c(q1,q2)*Verbal_Fluency_Conservative.BL
+Verbal_Fluency_Conservative.FU1 ~~ c(q1,q2)*Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ c(i1,i2)*MAT_Score.BL
+MAT_Score.FU1 ~~ c(i1,i2)*MAT_Score.FU1
+COG_REYII_SCORE.BL ~~ c(k1,k2)*COG_REYII_SCORE.BL
+COG_REYII_SCORE.FU1 ~~ c(k1,k2)*COG_REYII_SCORE.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.BL
+COG_REYI_SCORE.FU1 ~~ 0*COG_REYI_SCORE.FU1
+
+#specify autoregressions of latent variables
+EF_FU1 ~ 1*EF_BL
+MEM_FU1 ~ 1*MEM_BL
+
+#specify latent change score
+EF_DELTA =~ 1*EF_FU1
+MEM_DELTA =~ 1*MEM_FU1
+
+#specify latent change score mean and variance
+EF_DELTA ~ c(m1,m2)*1
+EF_DELTA ~~ c(n1,n2)*EF_DELTA
+
+MEM_DELTA ~ c(o1,o2)*1
+MEM_DELTA ~~ c(p1,p2)*MEM_DELTA
+
+#specify proportional change component
+EF_DELTA ~ EF_BL
+MEM_DELTA ~ MEM_BL
+
+#cross-domain covariance
+EF_DELTA ~~ MEM_BL
+MEM_DELTA ~~ EF_BL
+EF_BL ~~ MEM_BL
+'
+
+mdl0_multi_fit <- wide.data2 %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex)
+         ) %>%
+  group_by(Age_sex) %>%
+  mutate(Age_BL = scale (AGE_NMBR.BL, scale=FALSE) / 10,
+         Age_FU1 = scale (AGE_NMBR.FU1,scale=FALSE)/10,
+         White = recode ( SDC_CULT_WH.BL,
+                          '0' = -0.5,
+                          '1' = 0.5),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Physical_activity = (PASE_total.BL - median (PASE_total.BL, na.rm=TRUE)) /100,
+         Material_deprivation = (MSDYY_MFS.BL - median (MSDYY_MFS.BL, na.rm=TRUE)) ,
+         Social_deprivation = (MSDYY_SFS.BL - median (MSDYY_SFS.BL, na.rm=TRUE) ),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median (ED_UDR11.BL, na.rm=TRUE),
+         Income = INC_TOT.BL - median (INC_TOT.BL, na.rm=TRUE) ,
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("'English", "French"))),
+         Language_FU1 = as.numeric(factor (startlanguage.FU1,
+         levels = c("en", "fr"),
+         labels = c("English", "French"))),
+         Depression = DEP_CESD10.BL - median (DEP_CESD10.BL, na.rm=TRUE),
+         Smoking = median (SMK_DSTY.BL, na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol = median (ALC_FREQ.BL, na.rm=TRUE) - ALC_FREQ.BL,
+         Air_pollution = Air_pollution.BL,
+         MatINT = Material_deprivation*Physical_activity,
+         SocINT = Social_deprivation*Physical_activity
+  ) %>%
+  ungroup() %>%
+  cfa(mdl0,
+      data = .,
+      missing = "ML",
+      fixed.x = FALSE,
+      group = "AgeGrp")
+
+fitMeasures(mdl0_multi_fit, c("cfi","tli","rmsea","srmr"))
+parameterEstimates(mdl0_multi_fit,standardized=TRUE,output="data.frame",fmi=TRUE,remove.nonfree=TRUE)
+```
+
+Empty Model with separate groups for age and sex
+```{r}
+mdl0_multi_sex <- '
+#measurement model - loadings are fixed to be invariant over time
+EF_BL =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.BL + c(b1,b2,b3,b4)*MAT_Score.BL
+EF_FU1 =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.FU1 + c(b1,b2,b3,b4)*MAT_Score.FU1
+
+MEM_BL =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.BL + c(d1,d2,d3,d4)*COG_REYI_SCORE.BL
+MEM_FU1 =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.FU1 + c(d1,d2,d3,d4)*COG_REYI_SCORE.FU1
+
+#specify mean of latent scores
+EF_BL ~ c(e1,e2,e3,e4)*1
+EF_FU1 ~ 0*1
+
+MEM_BL ~ c(f1,f2,f3,f4)*1
+MEM_FU1 ~ 0*1
+
+#specify variance of latent scores
+EF_BL ~~ c(g1,g2,g3,g4)*EF_BL
+EF_FU1 ~~ 0*EF_FU1
+
+MEM_BL ~~ c(h1,h2,h3,h4)*MEM_BL
+MEM_FU1 ~~ 0*MEM_FU1
+
+#specify intercept of observed scores
+Verbal_Fluency_Conservative.BL ~ 0*1
+Verbal_Fluency_Conservative.FU1 ~ 0*1
+MAT_Score.BL ~ 0*1
+MAT_Score.FU1 ~ 0*1
+COG_REYII_SCORE.BL ~ 0*1
+COG_REYII_SCORE.FU1 ~ 0*1
+COG_REYI_SCORE.BL ~ 0*1
+COG_REYI_SCORE.FU1 ~ 0*1
+
+#allow residuals in indicators to correlate over time
+Verbal_Fluency_Conservative.BL ~~ Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ MAT_Score.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.FU1
+COG_REYII_SCORE.BL ~~ COG_REYII_SCORE.FU1
+
+#specify variances of observed variables
+Verbal_Fluency_Conservative.BL ~~ c(q1,q2,q3,q4)*Verbal_Fluency_Conservative.BL
+Verbal_Fluency_Conservative.FU1 ~~ c(q1,q2,q3,q4)*Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ c(i1,i2,i3,i4)*MAT_Score.BL
+MAT_Score.FU1 ~~ c(i1,i2,i3,i4)*MAT_Score.FU1
+COG_REYII_SCORE.BL ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.BL
+COG_REYII_SCORE.FU1 ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.BL
+COG_REYI_SCORE.FU1 ~~ 0*COG_REYI_SCORE.FU1
+
+#specify autoregressions of latent variables
+EF_FU1 ~ 1*EF_BL
+MEM_FU1 ~ 1*MEM_BL
+
+#specify latent change score
+EF_DELTA =~ 1*EF_FU1
+MEM_DELTA =~ 1*MEM_FU1
+
+#specify latent change score mean and variance
+EF_DELTA ~ c(m1,m2,m3,m4)*1
+EF_DELTA ~~ c(n1,n2,n3,n4)*EF_DELTA
+
+MEM_DELTA ~ c(o1,o2,o3,o4)*1
+MEM_DELTA ~~ c(p1,p2,p3,p4)*MEM_DELTA
+
+#specify proportional change component
+EF_DELTA ~~ EF_BL
+MEM_DELTA ~~ MEM_BL
+
+#cross-domain covariance
+EF_DELTA ~~ MEM_BL
+MEM_DELTA ~~ EF_BL
+EF_BL ~~ MEM_BL
+'
+
+mdl0_multi_sex_fit <- wide.data2 %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex)
+         ) %>%
+  group_by(Age_sex) %>%
+  mutate(Age_BL = scale (AGE_NMBR.BL, scale=FALSE) / 10,
+         Age_FU1 = scale (AGE_NMBR.FU1,scale=FALSE)/10,
+         White = recode ( SDC_CULT_WH.BL,
+                          '0' = -0.5,
+                          '1' = 0.5),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Physical_activity = (PASE_total.BL - median (PASE_total.BL, na.rm=TRUE)) /100,
+         Material_deprivation = (MSDYY_MFS.BL - median (MSDYY_MFS.BL, na.rm=TRUE)) ,
+         Social_deprivation = (MSDYY_SFS.BL - median (MSDYY_SFS.BL, na.rm=TRUE) ),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median (ED_UDR11.BL, na.rm=TRUE),
+         Income = INC_TOT.BL - median (INC_TOT.BL, na.rm=TRUE) ,
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("'English", "French"))),
+         Language_FU1 = as.numeric(factor (startlanguage.FU1,
+         levels = c("en", "fr"),
+         labels = c("English", "French"))),
+         Depression = DEP_CESD10.BL - median (DEP_CESD10.BL, na.rm=TRUE),
+         Smoking = median (SMK_DSTY.BL, na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol = median (ALC_FREQ.BL, na.rm=TRUE) - ALC_FREQ.BL,
+         Air_pollution = Air_pollution.BL,
+         MatINT = Material_deprivation*Physical_activity,
+         SocINT = Social_deprivation*Physical_activity
+  ) %>%
+  ungroup() %>%
+  cfa(mdl0_multi_sex,
+      data = .,
+      missing = "ML",
+      fixed.x = FALSE,
+      group = "Age_sex")
+
+
+fitMeasures(mdl0_multi_sex_fit, c("cfi","tli","rmsea","srmr"))
+parameterEstimates(mdl0_multi_sex_fit,standardized=TRUE,output="text",fmi=TRUE,remove.nonfree=TRUE)
+```
+
+
+# 4) Structural Equation Model: Main Effects Model
+
+This structural equation model only includes the main effects for our regressions (i.e., no interaction terms). The regressions modeled the following:
+
+  1) Whether material or social deprivation (measured using CANOE), or physical activity (measured using the PASE score) at baseline were independent predictors of baseline executive function or memory.
+  
+  2) Whether material or social deprivation or physical activity at baseline were independent predictors of changes in executive function or memory from baseline to Follow-Up 1.
+
+All parameter estimates of this model are provided in the spreadsheet "Age and Sex - Model Independent Model.csv"
+  
+```{r}
+mdl4_multi <- '
+#measurement model - loadings are fixed to be invariant over time
+EF_BL =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.BL + c(b1,b2,b3,b4)*MAT_Score.BL
+EF_FU1 =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.FU1 + c(b1,b2,b3,b4)*MAT_Score.FU1
+
+MEM_BL =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.BL + c(d1,d2,d3,d4)*COG_REYI_SCORE.BL
+MEM_FU1 =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.FU1 + c(d1,d2,d3,d4)*COG_REYI_SCORE.FU1
+
+#specify mean of latent scores
+EF_BL ~ c(e1,e2,e3,e4)*1
+EF_FU1 ~ 0*1
+
+MEM_BL ~ c(f1,f2,f3,f4)*1
+MEM_FU1 ~ 0*1
+
+#specify variance of latent scores
+EF_BL ~~ c(g1,g2,g3,g4)*EF_BL
+EF_FU1 ~~ 0*EF_FU1
+
+MEM_BL ~~ c(h1,h2,h3,h4)*MEM_BL
+MEM_FU1 ~~ 0*MEM_FU1
+
+#specify intercept of observed scores
+Verbal_Fluency_Conservative.BL ~ 0*1
+Verbal_Fluency_Conservative.FU1 ~ 0*1
+MAT_Score.BL ~ 0*1
+MAT_Score.FU1 ~ 0*1
+COG_REYII_SCORE.BL ~ 0*1
+COG_REYII_SCORE.FU1 ~ 0*1
+COG_REYI_SCORE.BL ~ 0*1
+COG_REYI_SCORE.FU1 ~ 0*1
+
+#allow residuals in indicators to correlate over time
+Verbal_Fluency_Conservative.BL ~~ Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ MAT_Score.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.FU1
+COG_REYII_SCORE.BL ~~ COG_REYII_SCORE.FU1
+
+#specify variances of observed variables
+Verbal_Fluency_Conservative.BL ~~ c(i1,i2,i3,i4)*Verbal_Fluency_Conservative.BL
+Verbal_Fluency_Conservative.FU1 ~~ c(i1,i2,i3,i4)*Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ c(j1,j2,j3,j4)*MAT_Score.BL
+MAT_Score.FU1 ~~ c(j1,j2,j3,j4)*MAT_Score.FU1
+COG_REYII_SCORE.BL ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.BL
+COG_REYII_SCORE.FU1 ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.BL
+COG_REYI_SCORE.FU1 ~~ 0*COG_REYI_SCORE.FU1
+
+#specify autoregressions of latent variables
+#EF_FU1 ~ 1*EF_BL
+#MEM_FU1 ~ 1*MEM_BL
+
+#specify latent change score
+EF_DELTA =~ 1*EF_FU1
+MEM_DELTA =~ 1*MEM_FU1
+
+#specify latent change score mean and variance
+EF_DELTA ~ c(l1,l2,l3,l4)*1
+EF_DELTA ~~ c(m1,m2,m3,m4)*EF_DELTA
+
+MEM_DELTA ~ c(n1,n2,n3,n4)*1
+MEM_DELTA ~~ c(o1,o2,o3,o4)*MEM_DELTA
+
+#specify proportional change component
+EF_DELTA ~ EF_BL
+MEM_DELTA ~ MEM_BL
+
+#cross-domain covariance
+EF_DELTA ~~ MEM_BL
+MEM_DELTA ~~ EF_BL
+EF_BL ~~ MEM_BL
+
+#regressions
+EF_DELTA + EF_BL ~ Multimorbidity + Education + Income + BMI + Source.BL + White + Smoking + Alcohol + Depression
+EF_BL ~ Age_BL + Language_BL
+EF_DELTA ~ Age_BL + Language_FU1
+EF_BL ~ c(c111a, c111b, c111c, c111d)*Material_deprivation + c(c121a, c121b, c121c, c121d)*Social_deprivation + c(b11a, b11b, b11c, b11d)*Physical_activity
+EF_DELTA ~ c(c211a, c211b, c211c, c211d)*Material_deprivation + c(c221a, c221b, c221c, c221d)*Social_deprivation + c(b21a, b21b, b21c, b21d)*Physical_activity
+
+MEM_DELTA + MEM_BL ~ Multimorbidity + Education + Income + BMI + Source.BL + White + Smoking + Alcohol + Depression
+MEM_BL ~ Age_BL + Language_BL
+MEM_DELTA ~ Age_BL + Language_FU1
+MEM_BL ~ c(c112a,c112b,c112c,c122d)*Material_deprivation + c(c122a,c122b,c122c,c122d)*Social_deprivation + c(b12a,b12b,b12c,b12d)*Physical_activity
+MEM_DELTA ~ c(c212a,c212b,c212c,c212d)*Material_deprivation + c(c222a,c222b,c222c,c222d)*Social_deprivation + c(b22a,b22b,b22c,b22d)*Physical_activity
+'
+
+mdl4_multi_fit <- wide.data2 %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex)
+         ) %>%
+  group_by(Age_sex) %>%
+  mutate(Age_BL = scale (AGE_NMBR.BL, scale=FALSE) / 10,
+         Age_FU1 = scale (AGE_NMBR.FU1,scale=FALSE)/10,
+         White = recode ( SDC_CULT_WH.BL,
+                          '0' = -0.5,
+                          '1' = 0.5),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Physical_activity = (PASE_total.BL - median (PASE_total.BL, na.rm=TRUE)) /100,
+         Material_deprivation = (MSDYY_MFS.BL - median (MSDYY_MFS.BL, na.rm=TRUE)) ,
+         Social_deprivation = (MSDYY_SFS.BL - median (MSDYY_SFS.BL, na.rm=TRUE) ),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median (ED_UDR11.BL, na.rm=TRUE),
+         Income = INC_TOT.BL - median (INC_TOT.BL, na.rm=TRUE) ,
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("'English", "French"))),
+         Language_FU1 = as.numeric(factor (startlanguage.FU1,
+         levels = c("en", "fr"),
+         labels = c("English", "French"))),
+         Depression = DEP_CESD10.BL - median (DEP_CESD10.BL, na.rm=TRUE),
+         Smoking = median (SMK_DSTY.BL, na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol = median (ALC_FREQ.BL, na.rm=TRUE) - ALC_FREQ.BL,
+         Air_pollution = Air_pollution.BL,
+         MatINT = Material_deprivation*Physical_activity,
+         SocINT = Social_deprivation*Physical_activity
+  ) %>%
+  ungroup() %>%
+  cfa(mdl4_multi,
+      data = .,
+      missing = "ML",
+      fixed.x = FALSE,
+      group = "Age_sex")
+
+summary(mdl4_multi_fit)
+fitMeasures(mdl4_multi_fit, c("cfi","tli","rmsea","rmsea.ci.lower","rmsea.ci.upper"))
+parameterEstimates(mdl4_multi_fit,standardized=TRUE,output="text",fmi=TRUE,remove.nonfree=TRUE)
+```
+
+
+# 5) Structural Equation Model: Interaction Model
+
+This structural equation model includes the interaction effects for our regressions. The regressions modeled the following:
+
+  1) Whether material or social deprivation (measured using CANOE), or physical activity (measured using the PASE score) at baseline were independent predictors of baseline executive function or memory, and whether physical activity moderated the relationships between material or social deprivation and baseline cognitive performance.
+  
+  2) Whether material or social deprivation or physical activity at baseline were independent predictors of changes in executive function or memory from baseline to Follow-Up 1, and whether physical activity moderated the relationships between material or social deprivation and changes in cognitive performance.
+
+For graphing purposes, we calculated an interaction term in our models which was then included in our structural equation model. All parameter estimates of this model are provided in the spreadsheet "Interaction Model by age groups and sex - no interaction term.csv"
+
+```{r}
+mdl_int2_age_sex <- '
+#measurement model - loadings are fixed to be invariant over time
+EF_BL =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.BL + c(b1,b2,b3,b4)*MAT_Score.BL
+EF_FU1 =~ c(a1,a2,a3,a4)*Verbal_Fluency_Conservative.FU1 + c(b1,b2,b3,b4)*MAT_Score.FU1
+
+MEM_BL =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.BL + c(d1,d2,d3,d4)*COG_REYI_SCORE.BL
+MEM_FU1 =~ c(c1,c2,c3,c4)*COG_REYII_SCORE.FU1 + c(d1,d2,d3,d4)*COG_REYI_SCORE.FU1
+
+#specify mean of latent scores
+EF_BL ~ c(e1,e2,e3,e4)*1
+EF_FU1 ~ 0*1
+
+MEM_BL ~ c(f1,f2,f3,f4)*1
+MEM_FU1 ~ 0*1
+
+#specify variance of latent scores
+EF_BL ~~ c(g1,g2,g3,g4)*EF_BL
+EF_FU1 ~~ 0*EF_FU1
+
+MEM_BL ~~ c(h1,h2,h3,h4)*MEM_BL
+MEM_FU1 ~~ 0*MEM_FU1
+
+#specify intercept of observed scores
+Verbal_Fluency_Conservative.BL ~ 0*1
+Verbal_Fluency_Conservative.FU1 ~ 0*1
+MAT_Score.BL ~ 0*1
+MAT_Score.FU1 ~ 0*1
+COG_REYII_SCORE.BL ~ 0*1
+COG_REYII_SCORE.FU1 ~ 0*1
+COG_REYI_SCORE.BL ~ 0*1
+COG_REYI_SCORE.FU1 ~ 0*1
+
+#allow residuals in indicators to correlate over time
+Verbal_Fluency_Conservative.BL ~~ Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ MAT_Score.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.FU1
+COG_REYII_SCORE.BL ~~ COG_REYII_SCORE.FU1
+
+#specify variances of observed variables
+Verbal_Fluency_Conservative.BL ~~ c(i1,i2,i3,i4)*Verbal_Fluency_Conservative.BL
+Verbal_Fluency_Conservative.FU1 ~~ c(i1,i2,i3,i4)*Verbal_Fluency_Conservative.FU1
+MAT_Score.BL ~~ c(j1, j2,j3,j4)*MAT_Score.BL
+MAT_Score.FU1 ~~ c(j1,j2,j3,j4)*MAT_Score.FU1
+COG_REYII_SCORE.BL ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.BL
+COG_REYII_SCORE.FU1 ~~ c(k1,k2,k3,k4)*COG_REYII_SCORE.FU1
+COG_REYI_SCORE.BL ~~ 0*COG_REYI_SCORE.BL
+COG_REYI_SCORE.FU1 ~~ 0*COG_REYI_SCORE.FU1
+
+#specify autoregressions of latent variables
+EF_FU1 ~ 1*EF_BL
+MEM_FU1 ~ 1*MEM_BL
+
+#specify latent change score
+EF_DELTA =~ 1*EF_FU1
+MEM_DELTA =~ 1*MEM_FU1
+
+#specify latent change score mean and variance
+EF_DELTA ~ c(l1,l2,l3,l4)*1
+EF_DELTA ~~ c(m1,m2,m3,m4)*EF_DELTA
+
+MEM_DELTA ~ c(n1,n2,n3,n4)*1
+MEM_DELTA ~~ c(o1,o2,o3,o4)*MEM_DELTA
+
+#specify proportional change component
+EF_DELTA ~ EF_BL
+MEM_DELTA ~ MEM_BL
+
+#cross-domain covariance
+EF_DELTA ~~ MEM_BL
+MEM_DELTA ~~ EF_BL
+EF_BL ~~ MEM_BL
+
+#regressions
+EF_DELTA + EF_BL ~ Multimorbidity + Education + Income + BMI + Source.BL + White + Smoking + Alcohol + Depression
+EF_BL ~ Age_BL + Language_BL
+EF_DELTA ~ Age_BL + Language_FU1
+EF_BL ~ c(c111a, c111b, c111c, c111d)*Material_deprivation + c(c121a, c121b, c121c, c121d)*Social_deprivation + c(b11a, b11b, b11c, b11d)*Physical_activity + c(int1a,int1b,int1c,int1d)*MatINT + c(int2a,int2b,int2c,int2d)*SocINT
+EF_DELTA ~ c(c211a, c211b, c211c, c211d)*Material_deprivation + c(c221a, c221b, c221c, c221d)*Social_deprivation + c(b21a, b21b, b21c, b21d)*Physical_activity + c(int3a,int3b,int3c,int3d)*MatINT + c(int4a,int4b,int4c,int4d)*SocINT
+
+MEM_DELTA + MEM_BL ~ Multimorbidity + Education + Income + BMI + Source.BL + White + Smoking + Alcohol + Depression
+MEM_BL ~ Age_BL + Language_BL
+MEM_DELTA ~ Age_BL + Language_FU1
+MEM_BL ~ c(c112a,c112b,c112c,c122d)*Material_deprivation + c(c122a,c122b,c122c,c122d)*Social_deprivation + c(b12a,b12b,b12c,b12d)*Physical_activity + c(int5a,int5b,int5c,int5d)*MatINT + c(int6a,int6b,int6c,int6d)*SocINT
+MEM_DELTA ~ c(c212a,c212b,c212c,c212d)*Material_deprivation + c(c222a,c222b,c222c,c222d)*Social_deprivation + c(b22a,b22b,b22c,b22d)*Physical_activity + c(int7a,int7b,int7c,int7d)*MatINT + c(int8a,int8b,int8c,int8d)*SocINT
+'
+
+mdl_int2_age_sex_fit <- wide.data2 %>% 
+  filter(!entity_id%in%Mover_IDS) %>% 
+  mutate(AgeGrp = Agebin.BL,
+         Sex = factor(SEX_ASK.BL,
+                      levels = c("F","M")),
+         Age_sex = paste(AgeGrp,Sex)
+         ) %>%
+  group_by(Age_sex) %>%
+  mutate(Age_BL = scale (AGE_NMBR.BL, scale=FALSE) / 10,
+         Age_FU1 = scale (AGE_NMBR.FU1,scale=FALSE)/10,
+         White = recode ( SDC_CULT_WH.BL,
+                          '0' = -0.5,
+                          '1' = 0.5),
+         BMI = HWT_DBMI.BL,
+         Multimorbidity = Chronic.BL,
+         Physical_activity = (PASE_total.BL - median (PASE_total.BL, na.rm=TRUE)) /100,
+         Material_deprivation = (MSDYY_MFS.BL - median (MSDYY_MFS.BL, na.rm=TRUE)) ,
+         Social_deprivation = (MSDYY_SFS.BL - median (MSDYY_SFS.BL, na.rm=TRUE) ),
+         #CENTER FOLLOWING AT MEDIAN
+         Education = ED_UDR11.BL - median (ED_UDR11.BL, na.rm=TRUE),
+         Income = INC_TOT.BL - median (INC_TOT.BL, na.rm=TRUE) ,
+         Language_BL = as.numeric(factor(startlanguage.BL,
+                                         levels = c("en","fr"),
+                                         labels = c("'English", "French"))),
+         Language_FU1 = as.numeric(factor (startlanguage.FU1,
+         levels = c("en", "fr"),
+         labels = c("English", "French"))),
+         Depression = DEP_CESD10.BL - median (DEP_CESD10.BL, na.rm=TRUE),
+         Smoking = median (SMK_DSTY.BL, na.rm=TRUE) - SMK_DSTY.BL,
+         Alcohol = median (ALC_FREQ.BL, na.rm=TRUE) - ALC_FREQ.BL,
+         Air_pollution = Air_pollution.BL,
+         MatINT = Material_deprivation*Physical_activity,
+         SocINT = Social_deprivation*Physical_activity
+  ) %>%
+  ungroup() %>%
+  cfa(mdl_int2_age_sex,
+      data = .,
+      missing = "ML",
+      fixed.x = FALSE,
+      group = "Age_sex")
+
+summary(mdl_int2_age_sex_fit)
+fitMeasures(mdl_int2_age_sex_fit, c("cfi","tli","rmsea","srmr"))
+parameterEstimates(mdl_int2_age_sex_fit,standardized=TRUE,output="text",fmi=TRUE,remove.nonfree=TRUE)
+```
+
+
+# 6) Graph Set-Up
+
+For Main Effects Model
+```{r}
+#Determine Parameter Estimates 
+param2<-as.data.frame(parameterEstimates(mdl4_multi_fit))
+
+  #Group 1 (Males 45-64 years)
+EF_BL_Mat_b5<-param2[70,7] #Baseline EF MAT slope
+EF_BL_Soc_b5<-param2[71,7] #Baseline EF SOC slope
+EF_BL_PA_b5<-param2[72,7] #Baseline EF PA slope
+EF_BL_Mat_b5_se<-param2[70,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b5_se<-param2[71,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b5_se<-param2[72,8] #Baseline EF PA slope standard error
+
+
+EF_Delta_Mat_b5<-param2[73,7] #Delta EF MAT slope
+EF_Delta_Soc_b5<-param2[74,7] #Delta EF SOC slope
+EF_Delta_PA_b5<-param2[75,7] #Delta EF PA slope
+EF_Delta_Mat_b5_se<-param2[73,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b5_se<-param2[74,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b5_se<-param2[75,8] #Delta EF PA slope standard error
+
+Mem_BL_Mat_b5<-param2[98,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b5<-param2[99,7] #Baseline Memory SOC slope
+Mem_BL_PA_b5<-param2[100,7] #Baseline Memory PA slope
+Mem_BL_Mat_b5_se<-param2[98,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b5_se<-param2[99,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b5_se<-param2[100,8] #Baseline Memory PA slope standard error
+
+
+Mem_Delta_Mat_b5<-param2[101,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b5<-param2[102,7] #Delta Memory SOC slope
+Mem_Delta_PA_b5<-param2[103,7] #Delta Memory PA slope
+Mem_Delta_Mat_b5_se<-param2[101,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b5_se<-param2[102,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b5_se<-param2[103,8] #Delta Memory PA slope standard error
+
+
+
+#Group 2 (65+ females)
+EF_BL_Mat_b6<-param2[309,7] #Baseline EF MAT slope
+EF_BL_Soc_b6<-param2[310,7] #Baseline EF SOC slope
+EF_BL_PA_b6<-param2[311,7] #Baseline EF PA slope
+EF_BL_Mat_b6_se<-param2[309,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b6_se<-param2[310,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b6_se<-param2[311,8] #Baseline EF PA slope standard error
+
+
+EF_Delta_Mat_b6<-param2[312,7] #Delta EF MAT slope
+EF_Delta_Soc_b6<-param2[313,7] #Delta EF SOC slope
+EF_Delta_PA_b6<-param2[314,7] #Delta EF PA slope
+EF_Delta_Mat_b6_se<-param2[312,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b6_se<-param2[313,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b6_se<-param2[314,8] #Delta EF PA slope standard error
+
+
+Mem_BL_Mat_b6<-param2[337,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b6<-param2[338,7] #Baseline Memory SOC slope
+Mem_BL_PA_b6<-param2[339,7] #Baseline Memory PA slope
+Mem_BL_Mat_b6_se<-param2[337,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b6_se<-param2[338,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b6_se<-param2[339,8] #Baseline Memory PA slope standard error
+
+
+Mem_Delta_Mat_b6<-param2[340,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b6<-param2[341,7] #Delta Memory SOC slope
+Mem_Delta_PA_b6<-param2[342,7] #Delta Memory PA slope
+Mem_Delta_Mat_b6_se<-param2[340,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b6_se<-param2[341,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b6_se<-param2[342,8] #Delta Memory PA slope standard error
+
+
+#Group 3 (45-64 females)
+EF_BL_Mat_b7<-param2[548,7] #Baseline EF MAT slope
+EF_BL_Soc_b7<-param2[549,7] #Baseline EF SOC slope
+EF_BL_PA_b7<-param2[550,7] #Baseline EF PA slope
+EF_BL_Mat_b7_se<-param2[548,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b7_se<-param2[549,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b7_se<-param2[550,8] #Baseline EF PA slope standard error
+
+
+EF_Delta_Mat_b7<-param2[551,7] #Delta EF MAT slope
+EF_Delta_Soc_b7<-param2[552,7] #Delta EF SOC slope
+EF_Delta_PA_b7<-param2[553,7] #Delta EF PA slope
+EF_Delta_Mat_b7_se<-param2[551,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b7_se<-param2[552,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b7_se<-param2[553,8] #Delta EF PA slope standard error
+
+
+Mem_BL_Mat_b7<-param2[576,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b7<-param2[577,7] #Baseline Memory SOC slope
+Mem_BL_PA_b7<-param2[578,7] #Baseline Memory PA slope
+Mem_BL_Mat_b7_se<-param2[576,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b7_se<-param2[577,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b7_se<-param2[578,8] #Baseline Memory PA slope standard error
+
+
+Mem_Delta_Mat_b7<-param2[579,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b7<-param2[580,7] #Delta Memory SOC slope
+Mem_Delta_PA_b7<-param2[581,7] #Delta Memory PA slope
+Mem_Delta_Mat_b7_se<-param2[579,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b7_se<-param2[580,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b7_se<-param2[581,8] #Delta Memory PA slope standard error
+
+
+#Group 4 (65+ Males)
+EF_BL_Mat_b8<-param2[787,7] #Baseline EF MAT slope
+EF_BL_Soc_b8<-param2[788,7] #Baseline EF SOC slope
+EF_BL_PA_b8<-param2[789,7] #Baseline EF PA slope
+EF_BL_Mat_b8_se<-param2[787,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b8_se<-param2[788,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b8_se<-param2[789,8] #Baseline EF PA slope standard error
+
+
+EF_Delta_Mat_b8<-param2[790,7] #Delta EF MAT slope
+EF_Delta_Soc_b8<-param2[791,7] #Delta EF SOC slope
+EF_Delta_PA_b8<-param2[792,7] #Delta EF PA slope
+EF_Delta_Mat_b8_se<-param2[790,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b8_se<-param2[791,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b8_se<-param2[792,8] #Delta EF PA slope standard error
+
+
+Mem_BL_Mat_b8<-param2[815,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b8<-param2[816,7] #Baseline Memory SOC slope
+Mem_BL_PA_b8<-param2[817,7] #Baseline Memory PA slope
+Mem_BL_Mat_b8_se<-param2[815,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b8_se<-param2[816,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b8_se<-param2[817,8] #Baseline Memory PA slope standard error
+
+
+Mem_Delta_Mat_b8<-param2[818,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b8<-param2[819,7] #Delta Memory SOC slope
+Mem_Delta_PA_b8<-param2[820,7] #Delta Memory PA slope
+Mem_Delta_Mat_b8_se<-param2[818,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b8_se<-param2[819,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b8_se<-param2[820,8] #Delta Memory PA slope standard error
+```
+
+
+For Interaction Model
+```{r}
+#Determine parameter estimates
+param<-as.data.frame(parameterEstimates(mdl_int2_age_sex_fit))
+COV<-vcov(mdl_int2_age_sex_fit)
+
+
+  #Group 1 (45-64 males)
+EF_BL_Mat_b1<-param[72,7] #Baseline EF MAT slope
+EF_BL_Soc_b1<-param[73,7] #Baseline EF SOC slope
+EF_BL_PA_b1<-param[74,7] #Baseline EF PA slope
+EF_BL_Mat_b1_se<-param[72,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b1_se<-param[73,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b1_se<-param[74,8] #Baseline EF PA slope standard error
+EF_BL_MatINT_b1<-param[75,7] #Baseline EF PA X MAT slope
+EF_BL_SocINT_b1<-param[76,7] #Baseline EF PA X SOC slope
+EF_BL_Mat_var1<-COV[49,49] #Baseline EF MAT variance
+EF_BL_Soc_var1<-COV[50,50] #Baseline EF SOC variance
+EF_BL_PA_var1<-COV[51,51] #Baseline EF PA variance
+EF_BL_MatINT_var1<-COV[52,52] #Baseline EF PA X MAT variance
+EF_BL_SocINT_var1<-COV[53,53] #Baseline EF PA X SOC variance
+EF_BL_MatINT_cov1<-COV[49,52] #Baseline EF MAT and PA X MAT covariance
+EF_BL_SocINT_cov1<-COV[50,53] #Baseline EF SOC and PA X SOC covariance
+
+
+EF_Delta_Mat_b1<-param[77,7] #Delta EF MAT slope
+EF_Delta_Soc_b1<-param[78,7] #Delta EF SOC slope
+EF_Delta_PA_b1<-param[79,7] #Delta EF PA slope
+EF_Delta_Mat_b1_se<-param[77,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b1_se<-param[78,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b1_se<-param[79,8] #Delta EF PA slope standard error
+EF_Delta_MatINT_b1<-param[80,7] #Delta EF PA X MAT slope
+EF_Delta_SocINT_b1<-param[81,7] #Delta EF PA X SOC slope
+EF_Delta_Mat_var1<-COV[54,54] #Delta EF MAT variance
+EF_Delta_Soc_var1<-COV[55,55] #Delta EF SOC variance
+EF_Delta_PA_var1<-COV[56,56] #Delta EF PA variance
+EF_Delta_MatINT_var1<-COV[57,57] #Delta EF PA X MAT variance
+EF_Delta_SocINT_var1<-COV[58,58] #Delta EF PA X SOC variance
+EF_Delta_MatINT_cov1<-COV[54,57] #Delta EF MAT and PA X MAT covariance
+EF_Delta_SocINT_cov1<-COV[55,58] #Delta EF SOC and PA X SOC covariance
+
+Mem_BL_Mat_b1<-param[104,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b1<-param[105,7] #Baseline Memory SOC slope
+Mem_BL_PA_b1<-param[106,7] #Baseline Memory PA slope
+Mem_BL_Mat_b1_se<-param[104,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b1_se<-param[105,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b1_se<-param[106,8] #Baseline Memory PA slope standard error
+Mem_BL_MatINT_b1<-param[107,7] #Baseline Memory PA X MAT slope
+Mem_BL_SocINT_b1<-param[108,7] #Baseline Memory PA X SOC slope
+Mem_BL_Mat_var1<-COV[81,81] #Baseline Memory MAT variance
+Mem_BL_Soc_var1<-COV[82,82] #Baseline Memory SOC variance
+Mem_BL_PA_var1<-COV[83,83] #Baseline Memory PA variance
+Mem_BL_MatINT_var1<-COV[84,84] #Baseline Memory PA X MAT variance
+Mem_BL_SocINT_var1<-COV[85,85] #Baseline Memory PA X SOC variance
+Mem_BL_MatINT_cov1<-COV[81,84] #Baseline Memory MAT and PA X MAT covariance
+Mem_BL_SocINT_cov1<-COV[82,85] #Baseline Memory SOC and PA X SOC covariance
+
+Mem_Delta_Mat_b1<-param[109,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b1<-param[110,7] #Delta Memory SOC slope
+Mem_Delta_PA_b1<-param[111,7] #Delta Memory PA slope
+Mem_Delta_Mat_b1_se<-param[109,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b1_se<-param[110,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b1_se<-param[111,8] #Delta Memory PA slope standard error
+Mem_Delta_MatINT_b1<-param[112,7] #Delta Memory PA X MAT slope
+Mem_Delta_SocINT_b1<-param[113,7] #Delta Memory PA X SOC slope
+Mem_Delta_Mat_var1<-COV[86,86] #Delta Memory MAT variance
+Mem_Delta_Soc_var1<-COV[87,87] #Delta Memory SOC variance
+Mem_Delta_PA_var1<-COV[88,88] #Delta Memory PA variance
+Mem_Delta_MatINT_var1<-COV[89,89] #Delta Memory PA X MAT variance
+Mem_Delta_SocINT_var1<-COV[90,90] #Delta Memory PA X SOC variance
+Mem_Delta_MatINT_cov1<-COV[86,89] #Delta Memory MAT and PA X MAT covariance
+Mem_Delta_SocINT_cov1<-COV[87,90] #Delta Memory SOC and PA X SOC covariance
+
+
+  #Group 2 (65+ females)
+EF_BL_Mat_b2<-param[356,7] #Baseline EF MAT slope
+EF_BL_Soc_b2<-param[357,7] #Baseline EF SOC slope
+EF_BL_PA_b2<-param[358,7] #Baseline EF PA slope
+EF_BL_Mat_b2_se<-param[356,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b2_se<-param[357,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b2_se<-param[358,8] #Baseline EF PA slope standard error
+EF_BL_MatINT_b2<-param[359,7] #Baseline EF PA X MAT slope
+EF_BL_SocINT_b2<-param[360,7] #Baseline EF PA X SOC slope
+EF_BL_Mat_var2<-COV[310,310] #Baseline EF MAT variance
+EF_BL_Soc_var2<-COV[311,311] #Baseline EF SOC variance
+EF_BL_PA_var2<-COV[312,312] #Baseline EF PA variance
+EF_BL_MatINT_var2<-COV[313,313] #Baseline EF PA X MAT variance
+EF_BL_SocINT_var2<-COV[314,314] #Baseline EF PA X SOC variance
+EF_BL_MatINT_cov2<-COV[310,313] #Baseline EF MAT and PA X MAT covariance
+EF_BL_SocINT_cov2<-COV[311,314] #Baseline EF SOC and PA X SOC covariance
+
+EF_Delta_Mat_b2<-param[361,7] #Delta EF MAT slope
+EF_Delta_Soc_b2<-param[362,7] #Delta EF SOC slope
+EF_Delta_PA_b2<-param[363,7] #Delta EF PA slope
+EF_Delta_Mat_b2_se<-param[361,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b2_se<-param[362,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b2_se<-param[363,8] #Delta EF PA slope standard error
+EF_Delta_MatINT_b2<-param[364,7] #Delta EF PA X MAT slope
+EF_Delta_SocINT_b2<-param[365,7] #Delta EF PA X SOC slope
+EF_Delta_Mat_var2<-COV[315,315] #Delta EF MAT variance
+EF_Delta_Soc_var2<-COV[316,316] #Delta EF SOC variance
+EF_Delta_PA_var2<-COV[317,317] #Delta EF PA variance
+EF_Delta_MatINT_var2<-COV[318,318] #Delta EF PA X MAT variance
+EF_Delta_SocINT_var2<-COV[319,319] #Delta EF PA X SOC variance
+EF_Delta_MatINT_cov2<-COV[315,318] #Delta EF MAT and PA X MAT covariance
+EF_Delta_SocINT_cov2<-COV[316,319] #Delta EF SOC and PA X SOC covariance
+
+Mem_BL_Mat_b2<-param[388,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b2<-param[389,7] #Baseline Memory SOC slope
+Mem_BL_PA_b2<-param[390,7] #Baseline Memory PA slope
+Mem_BL_Mat_b2_se<-param[388,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b2_se<-param[389,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b2_se<-param[390,8] #Baseline Memory PA slope standard error
+Mem_BL_MatINT_b2<-param[391,7] #Baseline Memory PA X MAT slope
+Mem_BL_SocINT_b2<-param[392,7] #Baseline Memory PA X SOC slope
+Mem_BL_Mat_var2<-COV[342,342] #Baseline Memory MAT variance
+Mem_BL_Soc_var2<-COV[343,343] #Baseline Memory SOC variance
+Mem_BL_PA_var2<-COV[344,344] #Baseline Memory PA variance
+Mem_BL_MatINT_var2<-COV[345,345] #Baseline Memory PA X MAT variance
+Mem_BL_SocINT_var2<-COV[346,346] #Baseline Memory PA X SOC variance
+Mem_BL_MatINT_cov2<-COV[342,345] #Baseline Memory MAT and PA X MAT covariance
+Mem_BL_SocINT_cov2<-COV[343,346] #Baseline Memory SOC and PA X SOC covariance
+
+Mem_Delta_Mat_b2<-param[393,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b2<-param[394,7] #Delta Memory SOC slope
+Mem_Delta_PA_b2<-param[395,7] #Delta Memory PA slope
+Mem_Delta_Mat_b2_se<-param[393,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b2_se<-param[394,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b2_se<-param[395,8] #Delta Memory PA slope standard error
+Mem_Delta_MatINT_b2<-param[396,7] #Delta Memory PA X MAT slope
+Mem_Delta_SocINT_b2<-param[397,7] #Delta Memory PA X SOC slope
+Mem_Delta_Mat_var2<-COV[347,347] #Delta Memory MAT variance
+Mem_Delta_Soc_var2<-COV[348,348] #Delta Memory SOC variance
+Mem_Delta_PA_var2<-COV[349,349] #Delta Memory PA variance
+Mem_Delta_MatINT_var2<-COV[350,350] #Delta Memory PA X MAT variance
+Mem_Delta_SocINT_var2<-COV[351,351] #Delta Memory PA X SOC variance
+Mem_Delta_MatINT_cov2<-COV[347,350] #Delta Memory MAT and PA X MAT covariance
+Mem_Delta_SocINT_cov2<-COV[348,351] #Delta Memory SOC and PA X SOC covariance
+
+  #Group 3 (45-64 females)
+EF_BL_Mat_b3<-param[640,7] #Baseline EF MAT slope
+EF_BL_Soc_b3<-param[641,7] #Baseline EF SOC slope
+EF_BL_PA_b3<-param[642,7] #Baseline EF PA slope
+EF_BL_Mat_b3_se<-param[640,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b3_se<-param[641,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b3_se<-param[642,8] #Baseline EF PA slope standard error
+EF_BL_MatINT_b3<-param[643,7] #Baseline EF PA X MAT slope
+EF_BL_SocINT_b3<-param[644,7] #Baseline EF PA X SOC slope
+EF_BL_Mat_var3<-COV[571,571] #Baseline EF MAT variance
+EF_BL_Soc_var3<-COV[572,572] #Baseline EF SOC variance
+EF_BL_PA_var3<-COV[573,573] #Baseline EF PA variance
+EF_BL_MatINT_var3<-COV[574,574] #Baseline EF PA X MAT variance
+EF_BL_SocINT_var3<-COV[575,575] #Baseline EF PA X SOC variance
+EF_BL_MatINT_cov3<-COV[571,574] #Baseline EF MAT and PA X MAT covariance
+EF_BL_SocINT_cov3<-COV[572,575] #Baseline EF SOC and PA X SOC covariance
+
+EF_Delta_Mat_b3<-param[645,7] #Delta EF MAT slope
+EF_Delta_Soc_b3<-param[646,7] #Delta EF SOC slope
+EF_Delta_PA_b3<-param[647,7] #Delta EF PA slope
+EF_Delta_Mat_b3_se<-param[645,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b3_se<-param[646,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b3_se<-param[647,8] #Delta EF PA slope standard error
+EF_Delta_MatINT_b3<-param[648,7] #Delta EF PA X MAT slope
+EF_Delta_SocINT_b3<-param[649,7] #Delta EF PA X SOC slope
+EF_Delta_Mat_var3<-COV[576,576] #Delta EF MAT variance
+EF_Delta_Soc_var3<-COV[577,577] #Delta EF SOC variance
+EF_Delta_PA_var3<-COV[578,578] #Delta EF PA variance
+EF_Delta_MatINT_var3<-COV[579,579] #Delta EF PA X MAT variance
+EF_Delta_SocINT_var3<-COV[580,580] #Delta EF PA X SOC variance
+EF_Delta_MatINT_cov3<-COV[576,579] #Delta EF MAT and PA X MAT covariance
+EF_Delta_SocINT_cov3<-COV[577,580] #Delta EF SOC and PA X SOC covariance
+
+Mem_BL_Mat_b3<-param[672,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b3<-param[673,7] #Baseline Memory SOC slope
+Mem_BL_PA_b3<-param[674,7] #Baseline Memory PA slope
+Mem_BL_Mat_b3_se<-param[672,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b3_se<-param[673,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b3_se<-param[674,8] #Baseline Memory PA slope standard error
+Mem_BL_MatINT_b3<-param[675,7] #Baseline Memory PA X MAT slope
+Mem_BL_SocINT_b3<-param[676,7] #Baseline Memory PA X SOC slope
+Mem_BL_Mat_var3<-COV[603,603] #Baseline Memory MAT variance
+Mem_BL_Soc_var3<-COV[604,604] #Baseline Memory SOC variance
+Mem_BL_PA_var3<-COV[605,605] #Baseline Memory PA variance
+Mem_BL_MatINT_var3<-COV[606,606] #Baseline Memory PA X MAT variance
+Mem_BL_SocINT_var3<-COV[607,607] #Baseline Memory PA X SOC variance
+Mem_BL_MatINT_cov3<-COV[603,606] #Baseline Memory MAT and PA X MAT covariance
+Mem_BL_SocINT_cov3<-COV[604,607] #Baseline Memory SOC and PA X SOC covariance
+
+Mem_Delta_Mat_b3<-param[677,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b3<-param[678,7] #Delta Memory SOC slope
+Mem_Delta_PA_b3<-param[679,7] #Delta Memory PA slope
+Mem_Delta_Mat_b3_se<-param[677,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b3_se<-param[678,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b3_se<-param[679,8] #Delta Memory PA slope standard error
+Mem_Delta_MatINT_b3<-param[680,7] #Delta Memory PA X MAT slope
+Mem_Delta_SocINT_b3<-param[681,7] #Delta Memory PA X SOC slope
+Mem_Delta_Mat_var3<-COV[608,608] #Delta Memory MAT variance
+Mem_Delta_Soc_var3<-COV[609,609] #Delta Memory SOC variance
+Mem_Delta_PA_var3<-COV[610,610] #Delta Memory PA variance
+Mem_Delta_MatINT_var3<-COV[611,611] #Delta Memory PA X MAT variance
+Mem_Delta_SocINT_var3<-COV[612,612] #Delta Memory PA X SOC variance
+Mem_Delta_MatINT_cov3<-COV[608,611] #Delta Memory MAT and PA X MAT covariance
+Mem_Delta_SocINT_cov3<-COV[609,612] #Delta Memory SOC and PA X SOC covariance
+
+  #Group 4 (65+ Males)
+EF_BL_Mat_b4<-param[924,7] #Baseline EF MAT slope
+EF_BL_Soc_b4<-param[925,7] #Baseline EF SOC slope
+EF_BL_PA_b4<-param[926,7] #Baseline EF PA slope
+EF_BL_Mat_b4_se<-param[924,8] #Baseline EF MAT slope standard error
+EF_BL_Soc_b4_se<-param[925,8] #Baseline EF SOC slope standard error
+EF_BL_PA_b4_se<-param[926,8] #Baseline EF PA slope standard error
+EF_BL_MatINT_b4<-param[927,7] #Baseline EF PA X MAT slope
+EF_BL_SocINT_b4<-param[928,7] #Baseline EF PA X SOC slope
+EF_BL_Mat_var4<-COV[832,832] #Baseline EF MAT variance
+EF_BL_Soc_var4<-COV[833,833] #Baseline EF SOC variance
+EF_BL_PA_var4<-COV[834,834] #Baseline EF PA variance
+EF_BL_MatINT_var4<-COV[835,835] #Baseline EF PA X MAT variance
+EF_BL_SocINT_var4<-COV[836,836] #Baseline EF PA X SOC variance
+EF_BL_MatINT_cov4<-COV[832,835] #Baseline EF MAT and PA X MAT covariance
+EF_BL_SocINT_cov4<-COV[833,836] #Baseline EF SOC and PA X SOC covariance
+
+EF_Delta_Mat_b4<-param[929,7] #Delta EF MAT slope
+EF_Delta_Soc_b4<-param[930,7] #Delta EF SOC slope
+EF_Delta_PA_b4<-param[931,7] #Delta EF PA slope
+EF_Delta_Mat_b4_se<-param[929,8] #Delta EF MAT slope standard error
+EF_Delta_Soc_b4_se<-param[930,8] #Delta EF SOC slope standard error
+EF_Delta_PA_b4_se<-param[931,8] #Delta EF PA slope standard error
+EF_Delta_MatINT_b4<-param[932,7] #Delta EF PA X MAT slope
+EF_Delta_SocINT_b4<-param[933,7] #Delta EF PA X SOC slope
+EF_Delta_Mat_var4<-COV[837,837] #Delta EF MAT variance
+EF_Delta_Soc_var4<-COV[838,838] #Delta EF SOC variance
+EF_Delta_PA_var4<-COV[839,839] #Delta EF PA variance
+EF_Delta_MatINT_var4<-COV[840,840] #Delta EF PA X MAT variance
+EF_Delta_SocINT_var4<-COV[841,841] #Delta EF PA X SOC variance
+EF_Delta_MatINT_cov4<-COV[837,840] #Delta EF MAT and PA X MAT covariance
+EF_Delta_SocINT_cov4<-COV[838,841] #Delta EF SOC and PA X SOC covariance
+
+Mem_BL_Mat_b4<-param[956,7] #Baseline Memory MAT slope
+Mem_BL_Soc_b4<-param[957,7] #Baseline Memory SOC slope
+Mem_BL_PA_b4<-param[958,7] #Baseline Memory PA slope
+Mem_BL_Mat_b4_se<-param[956,8] #Baseline Memory MAT slope standard error
+Mem_BL_Soc_b4_se<-param[957,8] #Baseline Memory SOC slope standard error
+Mem_BL_PA_b4_se<-param[958,8] #Baseline Memory PA slope standard error
+Mem_BL_MatINT_b4<-param[959,7] #Baseline Memory PA X MAT slope
+Mem_BL_SocINT_b4<-param[960,7] #Baseline Memory PA X SOC slope
+Mem_BL_Mat_var4<-COV[864,864] #Baseline Memory MAT variance
+Mem_BL_Soc_var4<-COV[865,865] #Baseline Memory SOC variance
+Mem_BL_PA_var4<-COV[866,866] #Baseline Memory PA variance
+Mem_BL_MatINT_var4<-COV[867,867] #Baseline Memory PA X MAT variance
+Mem_BL_SocINT_var4<-COV[868,868] #Baseline Memory PA X SOC variance
+Mem_BL_MatINT_cov4<-COV[864,867] #Baseline Memory MAT and PA X MAT covariance
+Mem_BL_SocINT_cov4<-COV[865,868] #Baseline Memory SOC and PA X SOC covariance
+
+Mem_Delta_Mat_b4<-param[961,7] #Delta Memory MAT slope
+Mem_Delta_Soc_b4<-param[962,7] #Delta Memory SOC slope
+Mem_Delta_PA_b4<-param[963,7] #Delta Memory PA slope
+Mem_Delta_Mat_b4_se<-param[961,8] #Delta Memory MAT slope standard error
+Mem_Delta_Soc_b4_se<-param[962,8] #Delta Memory SOC slope standard error
+Mem_Delta_PA_b4_se<-param[963,8] #Delta Memory PA slope standard error
+Mem_Delta_MatINT_b4<-param[964,7] #Delta Memory PA X MAT slope
+Mem_Delta_SocINT_b4<-param[965,7] #Delta Memory PA X SOC slope
+Mem_Delta_Mat_var4<-COV[869,869] #Delta Memory MAT variance
+Mem_Delta_Soc_var4<-COV[870,870] #Delta Memory SOC variance
+Mem_Delta_PA_var4<-COV[871,871] #Delta Memory PA variance
+Mem_Delta_MatINT_var4<-COV[872,872] #Delta Memory PA X MAT variance
+Mem_Delta_SocINT_var4<-COV[873,873] #Delta Memory PA X SOC variance
+Mem_Delta_MatINT_cov4<-COV[869,872] #Delta Memory MAT and PA X MAT covariance
+Mem_Delta_SocINT_cov4<-COV[870,873] #Delta Memory SOC and PA X SOC covariance
+
+
+```
+
+Standardized estimates for graphing
+```{r}
+sd1<-c(-2, -1.75, -1.5, -1.25, -1, -.75, -.5, -.25, 0,
+       .25,.5,.75,1,1.25,1.5,1.75,2)
+
+Group1<-subset(wide.data2, Agebin.BL=='45-64' & SEX_ASK.BL=='M')
+Group2<-subset(wide.data2, Agebin.BL=='65+' & SEX_ASK.BL=='F')
+Group3<-subset(wide.data2, Agebin.BL=='45-64' & SEX_ASK.BL=='F')
+Group4<-subset(wide.data2, Agebin.BL=='65+' & SEX_ASK.BL=='M')
+
+sd2a <-sd1*sd(Group1$PASE_total.BL, na.rm=TRUE)/100
+sd2b <-sd1*sd(Group2$PASE_total.BL, na.rm=TRUE)/100
+sd2c <-sd1*sd(Group3$PASE_total.BL, na.rm=TRUE)/100
+sd2d <-sd1*sd(Group4$PASE_total.BL, na.rm=TRUE)/100
+
+sd3a <-sd1*sd(Group1$Material_deprivation.BL, na.rm=TRUE)
+sd3b <-sd1*sd(Group2$Material_deprivation.BL, na.rm=TRUE)
+sd3c <-sd1*sd(Group3$Material_deprivation.BL, na.rm=TRUE)
+sd3d <-sd1*sd(Group4$Material_deprivation.BL, na.rm=TRUE)
+
+sd4a <-sd1*sd(Group1$Social_deprivation.BL, na.rm=TRUE)
+sd4b <-sd1*sd(Group2$Social_deprivation.BL, na.rm=TRUE)
+sd4c <-sd1*sd(Group3$Social_deprivation.BL, na.rm=TRUE)
+sd4d <-sd1*sd(Group4$Social_deprivation.BL, na.rm=TRUE)
+```
+
+# 7) Main effects graphs
+Main effects are presented separately for physical activity, material deprivation, and social deprivation stratified by
+
+
+## 7.1) Relationship between PASE score and Memory based on age and biological sex
+
+Baseline Executive Function
+```{r}
+PA1<-EF_BL_PA_b5*(sd2a)
+UB_PA<-PA1 + EF_BL_PA_b5_se*qnorm(.975)
+LB_PA<-PA1 + EF_BL_PA_b5_se*qnorm(0.025)
+EF_PA1a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+EF_PA1a$Group<-"Males 45-64 years"
+
+PA1<-EF_BL_PA_b6*(sd2b)
+UB_PA<-PA1 + EF_BL_PA_b6_se*qnorm(.975)
+LB_PA<-PA1 + EF_BL_PA_b6_se*qnorm(0.025)
+EF_PA2a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+EF_PA2a$Group<-"Females 65+ years"
+
+PA1<-EF_BL_PA_b7*(sd2c)
+UB_PA<-PA1 + EF_BL_PA_b7_se*qnorm(.975)
+LB_PA<-PA1 + EF_BL_PA_b7_se*qnorm(0.025)
+EF_PA3a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+EF_PA3a$Group<-"Females 45-64 years"
+
+PA1<-EF_BL_PA_b8*(sd2d)
+UB_PA<-PA1 + EF_BL_PA_b8_se*qnorm(.975)
+LB_PA<-PA1 + EF_BL_PA_b8_se*qnorm(0.025)
+EF_PA4a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+EF_PA4a$Group<-"Males 65+ years"
+
+EF_PA <- rbind(EF_PA1a,EF_PA2a,EF_PA3a,EF_PA4a)
+
+
+ggplot(EF_PA, aes(x= sd1, y = PA1, ymin=LB_PA, ymax=UB_PA, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+
+  xlab('Standardized PASE Scores')+
+  ylab('Baseline Executive Function')+
+  ggtitle("Association of PASE score with Baseline Executive Function 
+based on age and biological sex")
+```  
+
+Delta Executive Function
+```{r}
+PA2<-EF_Delta_PA_b5*(sd2a)
+UB_PA<-PA2 + EF_Delta_PA_b5_se*qnorm(.975)
+LB_PA<-PA2 + EF_Delta_PA_b5_se*qnorm(0.025)
+EF_PA5a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+EF_PA5a$Group<-"Males 45-64 years"
+
+PA2<-EF_Delta_PA_b6*(sd2b)
+UB_PA<-PA2 + EF_Delta_PA_b6_se*qnorm(.975)
+LB_PA<-PA2 + EF_Delta_PA_b6_se*qnorm(0.025)
+EF_PA6a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+EF_PA6a$Group<-"Females 65+ years"
+
+PA2<-EF_Delta_PA_b7*(sd2c)
+UB_PA<-PA2 + EF_Delta_PA_b7_se*qnorm(.975)
+LB_PA<-PA2 + EF_Delta_PA_b7_se*qnorm(0.025)
+EF_PA7a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+EF_PA7a$Group<-"Females 45-64 years"
+
+PA2<-EF_Delta_PA_b8*(sd2c)
+UB_PA<-PA2 + EF_Delta_PA_b8_se*qnorm(.975)
+LB_PA<-PA2 + EF_Delta_PA_b8_se*qnorm(0.025)
+EF_PA8a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+EF_PA8a$Group<-"Males 65+ years"
+
+EF_PA <- rbind(EF_PA5a,EF_PA6a,EF_PA7a,EF_PA8a)
+ggplot(EF_PA, aes(x= sd1, y = PA2, ymin=LB_PA, ymax=UB_PA, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+
+  xlab('Standardized PASE Scores')+
+  ylab('\u2206 Executive Function')+
+  ggtitle("Association of PASE score with \u2206 Executive Function 
+based on age and biological sex")
+```
+
+Baseline Memory
+```{r}
+PA1<-Mem_BL_PA_b5*(sd2a)
+UB_PA<-PA1 + Mem_BL_PA_b5_se*qnorm(.975)
+LB_PA<-PA1 + Mem_BL_PA_b5_se*qnorm(0.025)
+Mem_PA1a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+Mem_PA1a$Group<-"Males 45-64 years"
+
+PA1<-Mem_BL_PA_b6*(sd2b)
+UB_PA<-PA1 + Mem_BL_PA_b6_se*qnorm(.975)
+LB_PA<-PA1 + Mem_BL_PA_b6_se*qnorm(0.025)
+Mem_PA2a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+Mem_PA2a$Group<-"Females 65+ years"
+
+PA1<-Mem_BL_PA_b7*(sd2c)
+UB_PA<-PA1 + Mem_BL_PA_b7_se*qnorm(.975)
+LB_PA<-PA1 + Mem_BL_PA_b7_se*qnorm(0.025)
+Mem_PA3a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+Mem_PA3a$Group<-"Females 45-64 years"
+
+PA1<-Mem_BL_PA_b8*(sd2d)
+UB_PA<-PA1 + Mem_BL_PA_b8_se*qnorm(.975)
+LB_PA<-PA1 + Mem_BL_PA_b8_se*qnorm(0.025)
+Mem_PA4a<-data.frame(PA1,UB_PA,LB_PA,sd1)
+Mem_PA4a$Group<-"Males 65+ years"
+
+Mem_PA <- rbind(Mem_PA1a,Mem_PA2a,Mem_PA3a,Mem_PA4a)
+
+
+ggplot(Mem_PA, aes(x= sd1, y = PA1, ymin=LB_PA, ymax=UB_PA, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+
+  xlab('Standardized PASE Scores')+
+  ylab('Baseline Memory')+
+  ggtitle("Association of PASE score with Baseline Memory 
+based on age and biological sex")
+```
+
+
+Delta Memory
+```{r}
+PA2<-Mem_Delta_PA_b5*(sd2a)
+UB_PA<-PA2 + Mem_Delta_PA_b5_se*qnorm(.975)
+LB_PA<-PA2 + Mem_Delta_PA_b5_se*qnorm(0.025)
+Mem_PA5a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+Mem_PA5a$Group<-"Males 45-64 years"
+
+PA2<-Mem_Delta_PA_b6*(sd2b)
+UB_PA<-PA2 + Mem_Delta_PA_b6_se*qnorm(.975)
+LB_PA<-PA2 + Mem_Delta_PA_b6_se*qnorm(0.025)
+Mem_PA6a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+Mem_PA6a$Group<-"Females 65+ years"
+
+PA2<-Mem_Delta_PA_b7*(sd2c)
+UB_PA<-PA2 + Mem_Delta_PA_b7_se*qnorm(.975)
+LB_PA<-PA2 + Mem_Delta_PA_b7_se*qnorm(0.025)
+Mem_PA7a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+Mem_PA7a$Group<-"Females 45-64 years"
+
+PA2<-Mem_Delta_PA_b8*(sd2c)
+UB_PA<-PA2 + Mem_Delta_PA_b8_se*qnorm(.975)
+LB_PA<-PA2 + Mem_Delta_PA_b8_se*qnorm(0.025)
+Mem_PA8a<-data.frame(PA2,UB_PA,LB_PA,sd1)
+Mem_PA8a$Group<-"Males 65+ years"
+
+Mem_PA <- rbind(Mem_PA5a,Mem_PA6a,Mem_PA7a,Mem_PA8a)
+ggplot(Mem_PA, aes(x= sd1, y = PA2, ymin=LB_PA, ymax=UB_PA, group=Group, colour=Group)) +
+  geom_line() +
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized PASE Scores')+
+  ylab('\u2206 Memory')+
+  ggtitle("Association of PASE score with \u2206 Memory
+based on age and biological sex")
+```
+
+## 7.2) Material Deprivation
+
+Baseline Executive Function
+```{r}
+Mat1<-EF_BL_Mat_b5*(sd2a)
+UB_Mat<-Mat1 + EF_BL_Mat_b5_se*qnorm(.975)
+LB_Mat<-Mat1 + EF_BL_Mat_b5_se*qnorm(0.025)
+EF_Mat1a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+EF_Mat1a$Group<-"Males 45-64 years"
+
+Mat1<-EF_BL_Mat_b6*(sd2b)
+UB_Mat<-Mat1 + EF_BL_Mat_b6_se*qnorm(.975)
+LB_Mat<-Mat1 + EF_BL_Mat_b6_se*qnorm(0.025)
+EF_Mat2a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+EF_Mat2a$Group<-"Females 65+ years"
+
+Mat1<-EF_BL_Mat_b7*(sd2c)
+UB_Mat<-Mat1 + EF_BL_Mat_b7_se*qnorm(.975)
+LB_Mat<-Mat1 + EF_BL_Mat_b7_se*qnorm(0.025)
+EF_Mat3a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+EF_Mat3a$Group<-"Females 45-64 years"
+
+Mat1<-EF_BL_Mat_b8*(sd2d)
+UB_Mat<-Mat1 + EF_BL_Mat_b8_se*qnorm(.975)
+LB_Mat<-Mat1 + EF_BL_Mat_b8_se*qnorm(0.025)
+EF_Mat4a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+EF_Mat4a$Group<-"Males 65+ years"
+
+EF_Mat <- rbind(EF_Mat1a,EF_Mat2a,EF_Mat3a,EF_Mat4a)
+
+
+ggplot(EF_Mat, aes(x= sd1, y = Mat1, ymin=LB_Mat, ymax=UB_Mat, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('Baseline Executive Function')+
+  ggtitle("Association of Material Deprivation with Baseline Executive Function 
+based on age and biological sex")
+```
+
+
+Delta Executive Function
+```{r}
+Mat2<-EF_Delta_Mat_b5*(sd2a)
+UB_Mat<-Mat2 + EF_Delta_Mat_b5_se*qnorm(.975)
+LB_Mat<-Mat2 + EF_Delta_Mat_b5_se*qnorm(0.025)
+EF_Mat5a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+EF_Mat5a$Group<-"Males 45-64 years"
+
+Mat2<-EF_Delta_Mat_b6*(sd2b)
+UB_Mat<-Mat2 + EF_Delta_Mat_b6_se*qnorm(.975)
+LB_Mat<-Mat2 + EF_Delta_Mat_b6_se*qnorm(0.025)
+EF_Mat6a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+EF_Mat6a$Group<-"Females 65+ years"
+
+Mat2<-EF_Delta_Mat_b7*(sd2c)
+UB_Mat<-Mat2 + EF_Delta_Mat_b7_se*qnorm(.975)
+LB_Mat<-Mat2 + EF_Delta_Mat_b7_se*qnorm(0.025)
+EF_Mat7a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+EF_Mat7a$Group<-"Females 45-64 years"
+
+Mat2<-EF_Delta_Mat_b8*(sd2c)
+UB_Mat<-Mat2 + EF_Delta_Mat_b8_se*qnorm(.975)
+LB_Mat<-Mat2 + EF_Delta_Mat_b8_se*qnorm(0.025)
+EF_Mat8a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+EF_Mat8a$Group<-"Males 65+ years"
+
+EF_Mat <- rbind(EF_Mat5a,EF_Mat6a,EF_Mat7a,EF_Mat8a)
+ggplot(EF_Mat, aes(x= sd1, y = Mat2, ymin=LB_Mat, ymax=UB_Mat, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('\u2206 Executive Function')+
+  ggtitle("Association of Material Deprivation score with \u2206 Executive Function 
+based on age and biological sex")
+```
+
+Baseline Memory Function
+```{r}
+Mat1<-Mem_BL_Mat_b5*(sd2a)
+UB_Mat<-Mat1 + Mem_BL_Mat_b5_se*qnorm(.975)
+LB_Mat<-Mat1 + Mem_BL_Mat_b5_se*qnorm(0.025)
+Mem_Mat1a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+Mem_Mat1a$Group<-"Males 45-64 years"
+
+Mat1<-Mem_BL_Mat_b6*(sd2b)
+UB_Mat<-Mat1 + Mem_BL_Mat_b6_se*qnorm(.975)
+LB_Mat<-Mat1 + Mem_BL_Mat_b6_se*qnorm(0.025)
+Mem_Mat2a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+Mem_Mat2a$Group<-"Females 65+ years"
+
+Mat1<-Mem_BL_Mat_b7*(sd2c)
+UB_Mat<-Mat1 + Mem_BL_Mat_b7_se*qnorm(.975)
+LB_Mat<-Mat1 + Mem_BL_Mat_b7_se*qnorm(0.025)
+Mem_Mat3a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+Mem_Mat3a$Group<-"Females 45-64 years"
+
+Mat1<-Mem_BL_Mat_b8*(sd2d)
+UB_Mat<-Mat1 + Mem_BL_Mat_b8_se*qnorm(.975)
+LB_Mat<-Mat1 + Mem_BL_Mat_b8_se*qnorm(0.025)
+Mem_Mat4a<-data.frame(Mat1,UB_Mat,LB_Mat,sd1)
+Mem_Mat4a$Group<-"Males 65+ years"
+
+Mem_Mat <- rbind(Mem_Mat1a,Mem_Mat2a,Mem_Mat3a,Mem_Mat4a)
+
+
+ggplot(Mem_Mat, aes(x= sd1, y = Mat1, ymin=LB_Mat, ymax=UB_Mat, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('Baseline Memory')+
+  ggtitle("Association of Material Deprivation score with Baseline Memory 
+based on age and biological sex")
+```
+
+
+Delta Memory Function
+```{r}
+Mat2<-Mem_Delta_Mat_b5*(sd2a)
+UB_Mat<-Mat2 + Mem_Delta_Mat_b5_se*qnorm(.975)
+LB_Mat<-Mat2 + Mem_Delta_Mat_b5_se*qnorm(0.025)
+Mem_Mat5a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+Mem_Mat5a$Group<-"Males 45-64 years"
+
+Mat2<-Mem_Delta_Mat_b6*(sd2b)
+UB_Mat<-Mat2 + Mem_Delta_Mat_b6_se*qnorm(.975)
+LB_Mat<-Mat2 + Mem_Delta_Mat_b6_se*qnorm(0.025)
+Mem_Mat6a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+Mem_Mat6a$Group<-"Females 65+ years"
+
+Mat2<-Mem_Delta_Mat_b7*(sd2c)
+UB_Mat<-Mat2 + Mem_Delta_Mat_b7_se*qnorm(.975)
+LB_Mat<-Mat2 + Mem_Delta_Mat_b7_se*qnorm(0.025)
+Mem_Mat7a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+Mem_Mat7a$Group<-"Females 45-64 years"
+
+Mat2<-Mem_Delta_Mat_b8*(sd2c)
+UB_Mat<-Mat2 + Mem_Delta_Mat_b8_se*qnorm(.975)
+LB_Mat<-Mat2 + Mem_Delta_Mat_b8_se*qnorm(0.025)
+Mem_Mat8a<-data.frame(Mat2,UB_Mat,LB_Mat,sd1)
+Mem_Mat8a$Group<-"Males 65+ years"
+
+Mem_Mat <- rbind(Mem_Mat5a,Mem_Mat6a,Mem_Mat7a,Mem_Mat8a)
+ggplot(Mem_Mat, aes(x= sd1, y = Mat2, ymin=LB_Mat, ymax=UB_Mat, fgroup=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('\u2206 Memory')+
+  ggtitle("Association of Material Deprivation Score with \u2206 Memory
+based on age and biological sex")
+```
+
+
+## 7.3) Social Deprivation
+
+Baseline Executive Function
+```{r}
+Soc1<-EF_BL_Soc_b5*(sd2a)
+UB_Soc<-Soc1 + EF_BL_Soc_b5_se*qnorm(.975)
+LB_Soc<-Soc1 + EF_BL_Soc_b5_se*qnorm(0.025)
+EF_Soc1a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+EF_Soc1a$Group<-"Males 45-64 years"
+
+Soc1<-EF_BL_Soc_b6*(sd2b)
+UB_Soc<-Soc1 + EF_BL_Soc_b6_se*qnorm(.975)
+LB_Soc<-Soc1 + EF_BL_Soc_b6_se*qnorm(0.025)
+EF_Soc2a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+EF_Soc2a$Group<-"Females 65+ years"
+
+Soc1<-EF_BL_Soc_b7*(sd2c)
+UB_Soc<-Soc1 + EF_BL_Soc_b7_se*qnorm(.975)
+LB_Soc<-Soc1 + EF_BL_Soc_b7_se*qnorm(0.025)
+EF_Soc3a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+EF_Soc3a$Group<-"Females 45-64 years"
+
+Soc1<-EF_BL_Soc_b8*(sd2d)
+UB_Soc<-Soc1 + EF_BL_Soc_b8_se*qnorm(.975)
+LB_Soc<-Soc1 + EF_BL_Soc_b8_se*qnorm(0.025)
+EF_Soc4a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+EF_Soc4a$Group<-"Males 65+ years"
+
+EF_Soc <- rbind(EF_Soc1a,EF_Soc2a,EF_Soc3a,EF_Soc4a)
+
+
+ggplot(EF_Soc, aes(x= sd1, y = Soc1, ymin=LB_Soc, ymax=UB_Soc, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('Baseline Executive Function')+
+  ggtitle("Association of Social Deprivation with Baseline Executive Function 
+based on age and biological sex")
+```
+
+
+Delta Executive Function
+```{r}
+Soc2<-EF_Delta_Soc_b5*(sd2a)
+UB_Soc<-Soc2 + EF_Delta_Soc_b5_se*qnorm(.975)
+LB_Soc<-Soc2 + EF_Delta_Soc_b5_se*qnorm(0.025)
+EF_Soc5a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+EF_Soc5a$Group<-"Males 45-64 years"
+
+Soc2<-EF_Delta_Soc_b6*(sd2b)
+UB_Soc<-Soc2 + EF_Delta_Soc_b6_se*qnorm(.975)
+LB_Soc<-Soc2 + EF_Delta_Soc_b6_se*qnorm(0.025)
+EF_Soc6a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+EF_Soc6a$Group<-"Females 65+ years"
+
+Soc2<-EF_Delta_Soc_b7*(sd2c)
+UB_Soc<-Soc2 + EF_Delta_Soc_b7_se*qnorm(.975)
+LB_Soc<-Soc2 + EF_Delta_Soc_b7_se*qnorm(0.025)
+EF_Soc7a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+EF_Soc7a$Group<-"Females 45-64 years"
+
+Soc2<-EF_Delta_Soc_b8*(sd2c)
+UB_Soc<-Soc2 + EF_Delta_Soc_b8_se*qnorm(.975)
+LB_Soc<-Soc2 + EF_Delta_Soc_b8_se*qnorm(0.025)
+EF_Soc8a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+EF_Soc8a$Group<-"Males 65+ years"
+
+EF_Soc <- rbind(EF_Soc5a,EF_Soc6a,EF_Soc7a,EF_Soc8a)
+ggplot(EF_Soc, aes(x= sd1, y = Soc2, ymin=LB_Soc, ymax=UB_Soc, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('\u2206 Executive Function')+
+  ggtitle("Association of Social Deprivation score with \u2206 Executive Function 
+based on age and biological sex")
+```
+
+Baseline Memory Function
+```{r}
+Soc1<-Mem_BL_Soc_b5*(sd2a)
+UB_Soc<-Soc1 + Mem_BL_Soc_b5_se*qnorm(.975)
+LB_Soc<-Soc1 + Mem_BL_Soc_b5_se*qnorm(0.025)
+Mem_Soc1a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+Mem_Soc1a$Group<-"Males 45-64 years"
+
+Soc1<-Mem_BL_Soc_b6*(sd2b)
+UB_Soc<-Soc1 + Mem_BL_Soc_b6_se*qnorm(.975)
+LB_Soc<-Soc1 + Mem_BL_Soc_b6_se*qnorm(0.025)
+Mem_Soc2a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+Mem_Soc2a$Group<-"Females 65+ years"
+
+Soc1<-Mem_BL_Soc_b7*(sd2c)
+UB_Soc<-Soc1 + Mem_BL_Soc_b7_se*qnorm(.975)
+LB_Soc<-Soc1 + Mem_BL_Soc_b7_se*qnorm(0.025)
+Mem_Soc3a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+Mem_Soc3a$Group<-"Females 45-64 years"
+
+Soc1<-Mem_BL_Soc_b8*(sd2d)
+UB_Soc<-Soc1 + Mem_BL_Soc_b8_se*qnorm(.975)
+LB_Soc<-Soc1 + Mem_BL_Soc_b8_se*qnorm(0.025)
+Mem_Soc4a<-data.frame(Soc1,UB_Soc,LB_Soc,sd1)
+Mem_Soc4a$Group<-"Males 65+ years"
+
+Mem_Soc <- rbind(Mem_Soc1a,Mem_Soc2a,Mem_Soc3a,Mem_Soc4a)
+
+
+ggplot(Mem_Soc, aes(x= sd1, y = Soc1, ymin=LB_Soc, ymax=UB_Soc, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('Baseline Memory')+
+  ggtitle("Association of Social Deprivation score with Baseline Memory 
+based on age and biological sex")
+```
+
+
+Delta Memory Function
+```{r}
+Soc2<-Mem_Delta_Soc_b5*(sd2a)
+UB_Soc<-Soc2 + Mem_Delta_Soc_b5_se*qnorm(.975)
+LB_Soc<-Soc2 + Mem_Delta_Soc_b5_se*qnorm(0.025)
+Mem_Soc5a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+Mem_Soc5a$Group<-"Males 45-64 years"
+
+Soc2<-Mem_Delta_Soc_b6*(sd2b)
+UB_Soc<-Soc2 + Mem_Delta_Soc_b6_se*qnorm(.975)
+LB_Soc<-Soc2 + Mem_Delta_Soc_b6_se*qnorm(0.025)
+Mem_Soc6a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+Mem_Soc6a$Group<-"Females 65+ years"
+
+Soc2<-Mem_Delta_Soc_b7*(sd2c)
+UB_Soc<-Soc2 + Mem_Delta_Soc_b7_se*qnorm(.975)
+LB_Soc<-Soc2 + Mem_Delta_Soc_b7_se*qnorm(0.025)
+Mem_Soc7a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+Mem_Soc7a$Group<-"Females 45-64 years"
+
+Soc2<-Mem_Delta_Soc_b8*(sd2c)
+UB_Soc<-Soc2 + Mem_Delta_Soc_b8_se*qnorm(.975)
+LB_Soc<-Soc2 + Mem_Delta_Soc_b8_se*qnorm(0.025)
+Mem_Soc8a<-data.frame(Soc2,UB_Soc,LB_Soc,sd1)
+Mem_Soc8a$Group<-"Males 65+ years"
+
+Mem_Soc <- rbind(Mem_Soc5a,Mem_Soc6a,Mem_Soc7a,Mem_Soc8a)
+ggplot(Mem_Soc, aes(x= sd1, y = Soc2, ymin=LB_Soc, ymax=UB_Soc, group=Group, colour=Group)) +
+  geom_line()+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('\u2206 Memory')+
+  ggtitle("Association of Social Deprivation Score with \u2206 Memory
+based on age and biological sex")
+```
+
+# 8) Simple Slopes Graphs - PASE Score as the Moderator
+
+Simple slopes graphs are presented for significant interaction effects wherein PASE score is treated as the moderator. Briefly, each interaction graph details changes in the association between Material or Social Deprivation with cognitive function as a function of standardized PASE score for each age and sex group.
+
+
+## 8.1) Males 45-64 years
+
+Moderating effect of baseline social deprivation on the association between physical activity and baseline executive function.
+```{r}
+se1b<-sqrt(EF_BL_Soc_var1 + 2*(sd4a)*EF_BL_SocINT_cov1 + (sd4a^2)*EF_BL_SocINT_var1)
+
+b1b<-EF_BL_PA_b1+EF_BL_SocINT_b1*(sd4a)
+
+UB1b<-b1b + se1b*qnorm(.975)
+LB1b<-b1b + se1b*qnorm(0.025)
+
+EF_BL1b<-data.frame(b1b,sd1,UB1b,LB1b)
+
+ggplot(EF_BL1b)+
+  geom_ribbon(aes(ymin=LB1b, ymax=UB1b, x=sd1), alpha=.7)+
+  geom_line(aes(y=b1b, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('Simple Slope for Association of Physical Activity 
+with Baseline Executive Function')+
+  ggtitle("Physical Activity Predicting 
+Executive Function as a Function of 
+Social Deprivation (Males 45-64)")
+```
+
+
+Moderating effect of baseline social deprivation on the association between physical activity and changes in executive function from baseline to follow-up 1.
+```{r}
+se1d<-sqrt(EF_Delta_PA_var1 + 2*(sd4a)*EF_Delta_SocINT_cov1 + (sd4a^2)*EF_Delta_SocINT_var1)
+
+b1d<-EF_Delta_PA_b1+EF_Delta_SocINT_b1*(sd4a)
+
+UB1d<-b1d + se1d*qnorm(.975)
+LB1d<-b1d + se1d*qnorm(0.025)
+
+EF_Delta1b<-data.frame(b1d,sd1,UB1d,LB1d)
+
+ggplot(EF_Delta1b)+
+  geom_ribbon(aes(ymin=LB1d, ymax=UB1d, x=sd1), alpha=.7)+
+  geom_line(aes(y=b1d, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('Simple Slope for Association of Physical Activity
+with Changes in Executive Function')+
+  ggtitle("Physical Activity Predicting Changes in 
+Executive Function as a Function of 
+Social Deprivation Scores (Males 45-64)")
+```
+
+
+## 8.2) Males 65+ years
+
+Moderating effect of baseline social deprivation on the association between physical activity and baseline executive function.
+```{r}
+se4b<-sqrt(EF_BL_PA_var4 + 2*(sd4d)*EF_BL_SocINT_cov4 + (sd4d^2)*EF_BL_SocINT_var4)
+
+b4b<-EF_BL_PA_b4+EF_BL_SocINT_b4*(sd4d)
+
+UB4b<-b4b + se4b*qnorm(.975)
+LB4b<-b4b + se4b*qnorm(0.025)
+
+EF_BL4b<-data.frame(b4b,sd1,UB4b,LB4b)
+
+ggplot(EF_BL4b)+
+  geom_ribbon(aes(ymin=LB4b, ymax=UB4b, x=sd1), alpha=.7)+
+  geom_line(aes(y=b4b, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Social Deprivation Scores')+
+  ylab('Simple Slope for Association of Physical Activity 
+with Baseline Executive Function')+
+  ggtitle("Physical Activity Predicting 
+Executive Function as a Function of 
+Social Deprivation Scores (Males 65+)")
+```
+
+
+## 8.3) Females 45-64 years
+
+Note that variance in physical activity was limited for this model, and thus we created a smaller scale in order for standard errors to be fit for analysis
+```{r}
+sd3<-c(-2, -1.75, -1.5, -1.25, -1, -.75, -.5, -.25, 0,
+       .25, 0.3)
+
+sd3c <-sd3*sd(Group3$Material_deprivation.BL, na.rm=TRUE)
+
+```
+
+Moderating effect of baseline material deprivation on the association between PASE score and changes in memory from baseline to follow-up 1.
+```{r}
+se3g<-sqrt(Mem_Delta_PA_var3 + 2*(sd3c)*Mem_Delta_MatINT_cov3 + (sd3c^2)*Mem_Delta_MatINT_var3)
+
+b3g<-Mem_Delta_PA_b3+Mem_Delta_MatINT_b3*(sd3c)
+
+UB3g<-b3g + se3g*qnorm(.975)
+LB3g<-b3g + se3g*qnorm(0.025)
+
+Mem_Delta3a<-data.frame(b3g,sd3,UB3g,LB3g)
+
+ggplot(Mem_Delta3a)+
+  geom_ribbon(aes(ymin=LB3g, ymax=UB3g, x=sd3), alpha=.7)+
+  geom_line(aes(y=b3g, x=sd3))+
+  geom_hline(aes(yintercept=0), lty='dashed') +
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('Simple Slope for Association of Physical Activity
+with Changes in Memory')+
+  ggtitle("Physical Activity Predicting Changes in 
+Memory as a Function of Material Deprivation Scores (Females 45-64)")
+```
+
+
+
+
+
+## 8.4) Females 65+ years
+
+No significant moderating effects of physical activity on the associations of social or material deprivation with cognitive function
+
+
+
+
+
+
+# 9) Simple Slopes Graphs - Material/Social Deprivation as the Moderator
+
+Simple slopes graphs are presented for significant interaction effects wherein Material/Social Deprivation is treated as the moderator. Briefly, each interaction graph details changes in the association between physical activity (PASE Score) with cognitive function as a function of standardized Material or Social Deprivation score for each age and sex group.
+
+
+## 9.1) Males 45-64 years
+
+Moderating effect of baseline PASE score on the association between social deprivation and baseline executive function.
+```{r}
+se1b<-sqrt(EF_BL_PA_var1 + 2*(sd2a)*EF_BL_SocINT_cov1 + (sd2a^2)*EF_BL_SocINT_var1)
+
+b1b<-EF_BL_Soc_b1+EF_BL_SocINT_b1*(sd2a)
+
+UB1b<-b1b + se1b*qnorm(.975)
+LB1b<-b1b + se1b*qnorm(0.025)
+
+EF_BL1b<-data.frame(b1b,sd1,UB1b,LB1b)
+
+ggplot(EF_BL1b)+
+  geom_ribbon(aes(ymin=LB1b, ymax=UB1b, x=sd1), alpha=.7)+
+  geom_line(aes(y=b1b, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized PASE Scores')+
+  ylab('Simple Slope for Association of Social Deprivation 
+with Baseline Executive Function')+
+  ggtitle("Social Deprivation Predicting 
+Executive Function as a Function of 
+PASE score (Males 45-64)")
+```
+
+
+Moderating effect of baseline PASE score on the association between social deprivation and changes in executive function from baseline to follow-up 1.
+```{r}
+se1d<-sqrt(EF_Delta_Soc_var1 + 2*(sd2a)*EF_Delta_SocINT_cov1 + (sd2a^2)*EF_Delta_SocINT_var1)
+
+b1d<-EF_Delta_Soc_b1+EF_Delta_SocINT_b1*(sd2a)
+
+UB1d<-b1d + se1d*qnorm(.975)
+LB1d<-b1d + se1d*qnorm(0.025)
+
+EF_Delta1b<-data.frame(b1d,sd1,UB1d,LB1d)
+
+ggplot(EF_Delta1b)+
+  geom_ribbon(aes(ymin=LB1d, ymax=UB1d, x=sd1), alpha=.7)+
+  geom_line(aes(y=b1d, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized PASE Scores')+
+  ylab('Simple Slope for Association of Social Deprivation
+with Changes in Executive Function')+
+  ggtitle("Social Deprivation Predicting Changes in 
+Executive Function as a Function of 
+PASE Scores (Males 45-64)")
+```
+
+
+## 9.2) Males 65+ years
+
+Moderating effect of baseline PASE score on the association between social deprivation and baseline executive function.
+```{r}
+se4b<-sqrt(EF_BL_Soc_var4 + 2*(sd2d)*EF_BL_SocINT_cov4 + (sd2d^2)*EF_BL_SocINT_var4)
+
+b4b<-EF_BL_Soc_b4+EF_BL_SocINT_b4*(sd2d)
+
+UB4b<-b4b + se4b*qnorm(.975)
+LB4b<-b4b + se4b*qnorm(0.025)
+
+EF_BL4b<-data.frame(b4b,sd1,UB4b,LB4b)
+
+ggplot(EF_BL4b)+
+  geom_ribbon(aes(ymin=LB4b, ymax=UB4b, x=sd1), alpha=.7)+
+  geom_line(aes(y=b4b, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed')+
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized PASE Scores')+
+  ylab('Simple Slope for Association of Social Deprivation 
+with Baseline Executive Function')+
+  ggtitle("Social Deprivation Predicting 
+Executive Function as a Function of 
+PASE Scores (Males 65+)")
+```
+
+
+## 9.3) Females 45-64 years
+
+
+Moderating effect of PASE score on the association between material deprivation and changes in memory from baseline to follow-up 1.
+```{r}
+se3g<-sqrt(Mem_Delta_Mat_var3 + 2*(sd2c)*Mem_Delta_MatINT_cov3 + (sd2c^2)*Mem_Delta_MatINT_var3)
+
+b3g<-Mem_Delta_Mat_b3+Mem_Delta_MatINT_b3*(sd2c)
+
+UB3g<-b3g + se3g*qnorm(.975)
+LB3g<-b3g + se3g*qnorm(0.025)
+
+Mem_Delta3a<-data.frame(b3g,sd1,UB3g,LB3g)
+
+ggplot(Mem_Delta3a)+
+  geom_ribbon(aes(ymin=LB3g, ymax=UB3g, x=sd1), alpha=.7)+
+  geom_line(aes(y=b3g, x=sd1))+
+  geom_hline(aes(yintercept=0), lty='dashed') +
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+  xlab('Standardized Material Deprivation Scores')+
+  ylab('Simple Slope for Association of Physical Activity
+with Changes in Memory')+
+  ggtitle("Physical Activity Predicting Changes in 
+Memory as a Function of Material Deprivation Scores (Females 45-64)")
+```
+

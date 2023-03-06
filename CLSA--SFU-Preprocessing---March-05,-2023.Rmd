@@ -1,0 +1,746 @@
+---
+title: "CLSA - Social and Material Deprivation Analysis Preprocessing"
+author: "John R. Best & Ryan S. Falck"
+date: "2023-03-05"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This document contains all preprocessing code for our analysis examining age and sex differences in the associations of social and material deprivation on cognitive function, and whether these relationships are moderated by physical activity. All pre-processing was conducted by John R. Best and Ryan S. Falck.
+
+A separate file on Github contains all analyses and output (https://github.com/ryanfalck/CLSA-Social-Material-Deprivation-Analysis).
+
+# 1) Import Libraries
+```{r}
+library(tidyverse)
+```
+
+
+# 2) Import Data
+```{r}
+setwd("~/Desktop/UBC-Postdoctoral Fellowship/SFU CLSA Project")#Directory where you put the spreadsheet
+
+#Initial data release
+Comprehensive_BL_old <- read_csv("2006005_SimonFraserU_JBest_Baseline/2006005_SimonFraserU_JBest_CoP5_Baseline.csv")
+Tracking_BL_old <- read_csv("2006005_SimonFraserU_JBest_Baseline/2006005_SimonFraserU_JBest_Tra3_6_Baseline.csv")
+Weights_BL_old <- read_csv("2006005_SimonFraserU_JBest_Baseline/2006005_SimonFraserU_JBest_CombinedSampleWeigths1_2_Baseline.csv")
+
+Comprehensive_FU1_old <- read_csv("2006005_SimonFraserU_JBest_FU1/2006005_SimonFraserU_JBest_CoP3_FU1.csv")
+Tracking_FU1_old <- read_csv("2006005_SimonFraserU_JBest_FU1/2006005_SimonFraserU_JBest_Tra2_1_FU1.csv")
+
+Comprehensive_Status_FU1_old <- read_csv("2006005_SimonFraserU_JBest_FU1/2006005_SimonFraserU_JBest_Status201907_FUP1_CoP.csv")
+Tracking_Status_FU1_old <- read_csv("2006005_SimonFraserU_JBest_FU1/2006005_SimonFraserU_JBest_Status201907_FUP1_Tra.csv")
+
+#Pull out FSA values from previous release (not provided in update below)
+
+Comprehensive_BL_FSA <- Comprehensive_BL_old %>% 
+  select(entity_id,SDC_FSA_COM)
+
+Tracking_BL_FSA <- Tracking_BL_old %>% 
+  select(entity_id,SDC_FSA_TRM)
+
+Comprehensive_FU1_FSA <- Comprehensive_FU1_old %>% 
+  select(entity_id,SDC_FSA_COF1)
+
+Tracking_FU1_FSA <- Tracking_FU1_old %>% 
+  select(entity_id,SDC_FSA_TRF1)
+
+#March 2022 data release
+Comprehensive_BL <- read_csv("2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022/2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022_CoPv7_Qx_CANUE_PA.csv")
+Tracking_BL <- read_csv("2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022/2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022_Trav4_Qx_CANUE.csv")
+Weights_BL <- read_csv("2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022/2006005_SimonFraserU_JBest_Baseline_DRU_MARCH2022_SampleWeights_all_Baseline_v1-2_DRU.csv")
+
+Comprehensive_FU1 <- read_csv("2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022/2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022_CoPv3_2_Qx.csv")
+Tracking_FU1 <- read_csv("2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022/2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022_Trav2_3_Qx.csv")
+
+Comprehensive_Status_FU1 <- read_csv("2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022/2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022_Status201907_FU1_CoP_v2.csv")
+Tracking_Status_FU1 <- read_csv("2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022/2006005_SimonFraserU_JBest_FUP1_DRU_MARCH2022_Status201907_FU1_Tra_v2.csv")
+```
+
+#3) Create vectors for data of interest
+```{r}
+#Covariates
+covariates <- c(
+  "entity_id", #ID variables
+  "SDC_FSA", #FSA
+  "SDC_URBAN_RURAL", #urban versus rural setting
+  "OWN_DWLG", #type of housing
+  "AGE_NMBR", #Age in years (both timepoints)
+  "AGE_GRP", #Age group
+  "SEX_ASK",  #Sex (baseline only)
+  "startlanguage", #Language at start of interview (both timepoints)
+  "ED_UDR11", #educational attainment, 11 levels (baseline only)
+  "SMK_DSTY", #Type of smoker (baseline only)
+  "ALC_FREQ", #Frequency of alcohol consumption last 12 months (both timepoints)
+  "INC_TOT", #Total household income (both timepoints)
+  "HWT_DBMI", #BMI - self-reported for Tracking
+  "GEN_HLTH", #self-rated general health - excellent to poor
+  "GEN_MNTL",  #self-rated mental health  - excellent to poor
+  "GEN_OWNAG" #self-rated healthy aging - excellent to poor
+) 
+
+#Cognition
+cognition <- c(
+  "COG_REYI_SCORE",  #immediate recall (number of words)
+  "COG_REYII_SCORE", #delayed recall (number of words)
+  "COG_MAT_SCORE",   #number of correct alternations in 30 secs
+  "COG_AFT_SCORE_1", #number of different animals in 60 secs
+  "COG_AFT_SCORE_2"  #number of different animals in 60 secs
+)
+
+#Depression and physical performance
+mood_and_pp <- c(
+  "GS_EXAM_AVG", #Average grip strength (3 trials)
+  "GS_EXAM_MAX", #Max grip strength
+  "HGT_HEIGHT_M",#Average height in meters
+  "TUG_TIME", #TUG time (in seconds)
+  "WLK_TIME", #4m walk time (in seconds)
+  "BAL_BEST", #Best attained standing balance (in seconds)
+  "CR_AVG_TIME", #Average time for 1 chair rise (in seconds)
+  "CR_NB", #Number of chair rises
+  "CR_TIME", #Total time to complete chair rise task (in seconds)
+  "DEP_CESD10", #CES Short Depression Scale
+  "ADL_DCLST", #OARS IADLS and ADLS w/o meal preparation
+  "ADL_DMEA", #OARS Some or complete meal dependence
+  "ADL_DCLS" #OARS IADLS and ADLS
+)
+
+#PASE measures
+activity <- c(
+  "PA2_SIT_MCQ", #Frequency of sitting activities last 7 days
+  "PA2_SITHR_MCQ", #Hours spent sitting per day
+  "PA2_WALK_MCQ", #Frequency walking outside in last 7 days
+  "PA2_WALKHR_MCQ", #Average hours spent walking per day
+  "PA2_LSPRT_MCQ", #Frequency of light activities last 7 days
+  "PA2_LSPRTHR_MCQ", #Hours of light activities per day
+  "PA2_MSPRT_MCQ", #Frequency of moderate activities last 7 days
+  "PA2_MSPRTHR_MCQ", #Hours of moderate activites per day
+  "PA2_SSPRT_MCQ", #Frequency of streneous activities last 7 days
+  "PA2_SSPRTHR_MCQ", #Hours of streneous activities per day
+  "PA2_EXER_MCQ", #Frequency of strength exercises
+  "PA2_EXERHR_MCQ", #Hours of strength exercises per day
+  "PA2_LTHSWK_MCQ", #Light housework in last week
+  "PA2_HVYHSWK_MCQ", #Heavy housework in last week
+  "PA2_HMREPAIR_MCQ", #Home repairs in last week
+  "PA2_HVYODA_MCQ", #Lawn or yard care in last week
+  "PA2_LTODA_MCQ", #Outdoor gardening in last week
+  "PA2_CRPRSN_MCQ", #Cared for another in last week
+  "PA2_WRK_MCQ", #Work for pay or volunteer in last week
+  "PA2_WRKHRS_NB_MCQ", #Hours of pay or volunteer work
+  "PA2_WRKPA_MCQ" #Amount of PA requred for job or volunteering
+)
+
+#Social isolation index - Wister et al. 2019
+SII_items <- c(
+  "SPA_OUTS", #Family/ friends activities out of household
+  "SPA_CHRCH", #Religious activities
+  "SPA_SPORT", #Sports or PA with others
+  "SPA_EDUC", #Educational and cultural activities
+  "SPA_CLUB", #Clubs or fraternal activities
+  "SPA_NEIBR", #Association activities
+  "SPA_VOLUN", #Volunteer or charity work
+  "SPA_OTACT", #Other recreational activities
+  "SN_NEIBR_NB", #Number of neighbours known
+  "SN_SEENEIBR", #Last get together with neighbours
+  "SN_SIBLIV_NB", #Number of living siblings
+  "SN_SEESIB", #Last get together with siblings
+  "SN_FRND_NB", #Number of close friends
+  "SN_SEEFRND", #Last get together with close friends
+  "SN_CHILD_NB", #Living children including step, adopted,  biological, partners
+  "SN_SEECHILD", #Last get together with children
+  "SN_RELLIV_NB", #Living relatives
+  "SN_SEEREL", #Let get together with other relatives
+  "SN_PERWSCH_NB", #Number from work or school
+  "SN_PERCOM_NB", #Number from community involvement
+  "SN_PERACT_NB", #Number known from other activities
+  "SN_LIVH_NB", #People living in your household
+  "SDC_MRTL", #Marital/partner status
+  "DEP_LONLY", #How often feel lonely?
+  "SPA_MORAC", #Desire to participate in more activities
+  "SSA_NDTLK", #Someone you can count on to listen to you when you need to talk?
+  "SSA_CRISIS", #Someone to give you advice about a crisis?
+  "SSA_TYTDR", #Someone to take you to the doctor if needed?
+  "SSA_SHLOV", #Someone who shows you love and affection?
+  "SSA_GOODT", #Someone to have a good time with?
+  "SSA_INFO", #Someone to give you information in order to help you?
+  "SSA_CONFID", #Someone to confide in or talk to about yourself or your problems?
+  "SSA_HUGS", #Someone who hugs you?
+  "SSA_RELAX", #Someone to get together with for relaxation?
+  "SSA_MEALS", #Someone to prepare your meals if you were unable to do it yourself?
+  "SSA_ADVCE", #Someone whose advice you really want?
+  "SSA_MINDOFF", #Someone to do things with to help you get your mind off things?
+  "SSA_CHORES", #Someone to help with daily chores if you were sick?
+  "SSA_SHFEAR", #Someone to share your most private worries and fears with?
+  "SSA_SUGG", #Someone to turn to for suggestions about how to deal with a personal problem?
+  "SSA_ENJOY", #Someone to do something enjoyable with?
+  "SSA_PROBLM", #Someone who understands your problems?
+  "SSA_LOVU", #Someone to love you and make you feel wanted?
+  "SSA_DPALL", #Functional Social Support - MOS Scale
+  "SSA_DPTNG", #MOS subscale - Tangible social support
+  "SSA_DPAFF", #MOS subscale - Affection
+  "SSA_DPSOC", #MOS subscale - Positive Social Interaction
+  "SSA_DPEMO" #MOS subscale - Emotional and informational support
+)
+
+social_support_items <- c(
+  "SSA_CONFID", #Someone to help you if you were confined to bed?
+  "SSA_NDTLK", #Someone you can count on to listen to you when you need to talk?
+  "SSA_CRISIS", #Someone to give you advice about a crisis?
+  "SSA_TYTDR", #Someone to take you to the doctor if needed?
+  "SSA_SHLOV", #Someone who shows you love and affection?
+  "SSA_GOODT", #Someone to have a good time with?
+  "SSA_INFO", #Someone to give you information in order to help you?
+  "SSA_CONFID", #Someone to confide in or talk to about yourself or your problems?
+  "SSA_HUGS", #Someone who hugs you?
+  "SSA_RELAX", #Someone to get together with for relaxation?
+  "SSA_MEALS", #Someone to prepare your meals if you were unable to do it yourself?
+  "SSA_ADVCE", #Someone whose advice you really want?
+  "SSA_MINDOFF", #Someone to do things with to help you get your mind off things?
+  "SSA_CHORES", #Someone to help with daily chores if you were sick?
+  "SSA_SHFEAR", #Someone to share your most private worries and fears with?
+  "SSA_SUGG", #Someone to turn to for suggestions about how to deal with a personal problem?
+  "SSA_ENJOY", #Someone to do something enjoyable with?
+  "SSA_PROBLM", #Someone who understands your problems?
+  "SSA_LOVU" #Someone to love you and make you feel wanted?
+)
+
+#Weights for analysis of comprehensive and tracking separately
+source_weights <- c(
+  "WGHTS_PROV", #Province of recruitment
+  "WGHTS_TRIMMED", #Trimmed weights
+  "WGHTS_ANALYTIC", #Analytic weights
+  "WGHTS_GEOSTRAT" #Sampling strata
+)
+
+#CANUE environmental data
+canue <- c(
+  "GRLANYY_01", #annual mean ndvi (Normalized Difference Vegetation Index) at postal code
+  "GRLANYY_01_2011", #annual mean ndvi at postal code - 2011
+  "GRLANYY_01_2013", #annual mean ndvi at postal code - 2013
+  "MSDYY_MFS", #deprivation index - material factor
+  "MSDYY_SFS", #deprivation index - social factor
+  "MSDYY_CMA", #census metro area
+  "MSDYY_CSD", #census subdivision
+  "ALE16_04",  #intersection density z-score
+  "ALE16_05",  #dwelling density z-score
+  "ALE16_06",  #ALE index (intersection,dwelling,points of interest)
+  "ALE16_09",  #points of interest z-score
+  "ALE16_11",  #transit measure z-score
+  "ALE16_12",  #transit index (intersection,dwelling,points of interest,transit)
+  #Air pollution variables averaged over 50km radius
+  "no2_1yr",   #1-year (from interview date) NO2 average
+  "no2_1yr_cold",#1-year (from interview date) NO2 average - cold season only
+  "no2_1yr_warm",#1-year (from interview date) NO2 average - warm season only
+  "o38h_1yr",  #1-year (from interview date) Ozone average - 8 hour max
+  "o38h_1yr_cold",#1-year (from interview date) Ozone average - 8 hour max, cold season only
+  "o38h_1yr_warm",#1-year (from interview date) Ozone average - 8 hour max, warm season only
+  "o3_1yr",    #1-year (from interview date) Ozone average
+  "o3_1yr_cold",#1-year (from interview date) Ozone average - cold season only
+  "o3_1yr_warm",#1-year (from interview date) Ozone average - warm season only
+  "pm25_1yr",  #1-year (from interview date) PM2.5 average
+  "pm25_1yr_cold",#1-year (from interview date) PM2.5 average - cold season only
+  "pm25_1yr_warm",#1-year (from interview date) PM2.5 average - warm season only
+  "so2_1yr",   #1-year (from interview date) Sulfure dioxide average
+  "so2_1yr_cold",#1-year (from interview date) Sulfure dioxide average - cold season only
+  "so2_1yr_warm" #1-year (from interview date) Sulfure dioxide average - warm season only
+)
+
+#cultural background (baseline only)
+culture <- grep("SDC_CULT",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#PASE items
+pase_items <- grep("^PA2_",activity,value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#Medical Outcomes Study (MOS) Scale
+MOS_items <- grep("^SSA_",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#ADLs
+ADL_items <- grep("^ADL_",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#Social Participation
+SPA_items <- grep("^SPA_",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#Social Network
+SN_SEE_items <- grep("^SN_SEE",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+#Social network items
+Network1_items<- c("SN_LIVH_NB","SN_CHILD_NB","SN_SIBLIV_NB","SN_FRND_NB","SN_NEIBR_NB")
+Network2_items <- c("SN_PERWSCH_NB","SN_PERCOM_NB","SN_PERACT_NB","SN_RELLIV_NB")
+
+#Objective physical performance
+physper_items <- c("WLK_TIME","TUG_TIME","CR_TIME")
+
+#Miscellaneous items
+MISC_items <- c("INC_TOT","DEP_LONLY","SDC_MRTL")
+MISC2_items <- c("SMK_DSTY","ED_UDR11")
+
+#Chronic conditions 
+arthritis_comp <- c(
+  "OAHAND",#OA of the hand
+  "OAHIP", #OA of the hip
+  "OAKNEE",#OA of the knee
+  "RA",    #rheumatoid arthritis
+  "ARTOT" #other arthritis
+)
+
+arthritis_track <- c(
+  "OAHAND",#OA of the hand
+  "OAHIP", #OA of the hip
+  "OAKNEE",#OA of the knee
+  "RA",    #rheumatoid arthritis
+  "OTART" #other arthritis
+)
+
+phys_cond <- c(
+  "HEART", #heart disease including CHF
+  "PVD",   #peripheral vascular disease
+  "ALZH",  #Alzheimer's or dementia
+  "MS",    #multiple sclerosis
+  "EPIL",  #epilepsy
+  "ULCR",  #ulcers
+  "IBDIBS",#bowel disorder
+  "MACDEG",#macular degeneration
+  "CANC",  #cancer
+  "BCKP",  #back problems
+  "KIDN",  #kidney disease or failure
+  "ATHR",  #At least one of the arthritis conditions
+  "DIAB",  #diabetes
+  "HBP",   #high blood pressure
+  "UTHYR", #under-active thyroid
+  "ANGI",  #angina
+  "CVA",   #stroke
+  "AMI",   #heart attack or myocardial infarction
+  "OTHYR", #over-active thyroid
+  "TIA",   #transient ischemic attack
+  "ASTHM", #asthma
+  "OSTPO", #osteoporosis
+  "PARK",  #parkison's
+  "COPD"   #COPD
+)
+
+ment_cond <- c(
+  "ANXI",  #anxiety
+  "MOOD"   #mood
+)
+```
+
+
+# 4) Create PASE Score
+
+```{r}
+sitting_items <- grep("^PA2_SIT",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+frequency_items <- c(
+  "PA2_WALK_MCQ",
+  "PA2_LSPRT_MCQ",
+  "PA2_MSPRT_MCQ",
+  "PA2_SSPRT_MCQ",
+  "PA2_EXER_MCQ"
+) 
+
+frequency_recode <- function(x) (recode(x,
+                                        `1`=0,
+                                        `2`=1.5,
+                                        `3`=3.5,
+                                        `4`=6)) 
+
+hours_items <- c(
+  "PA2_WALKHR_MCQ",
+  "PA2_LSPRTHR_MCQ",
+  "PA2_MSPRTHR_MCQ",
+  "PA2_SSPRTHR_MCQ",
+  "PA2_EXERHR_MCQ"
+) 
+
+hours_recode <- function(x) (recode(x,
+                                    `1`=.5,
+                                    `2`=1.5,
+                                    `3`=3,
+                                    `4`=5))
+
+work_items <- grep("^PA2_WRK",names(Comprehensive_BL),value=TRUE) %>% 
+  gsub("_COM","",.)
+
+binary_items <- pase_items[!pase_items%in%c(
+  sitting_items,frequency_items,hours_items,work_items)==1] 
+
+binary_recode <- function(x) (recode(x,
+                                     `1`=1,
+                                     `2`=0))
+```
+
+
+# 5) Create Social Isolation Index
+
+```{r}
+community_participation <- c(
+  "SPA_OUTS",
+  "SPA_CHRCH",
+  "SPA_SPORT",
+  "SPA_EDUC",
+  "SPA_CLUB",
+  "SPA_NEIBR",
+  "SPA_VOLUN",
+  "SPA_OTACT"
+)
+
+community_participation_recode <- function(x) (recode(x,
+                                                      `1`=0,
+                                                      `2`=2.5,
+                                                      `3`=5,
+                                                      `4`=7.5,
+                                                      `5`=10)) 
+
+network_quantity <- c(
+  "SN_CHILD_NB",
+  "SN_FRND_NB",
+  "SN_NEIBR_NB",
+  "SN_SIBLIV_NB",
+  "SN_RELLIV_NB",
+  "SN_PERWSCH_NB",
+  "SN_PERCOM_NB",
+  "SN_PERACT_NB" 
+)
+
+network_rescale <- function(x) (10*(1-scale(x,
+                                            center=min(x,na.rm=TRUE),
+                                            scale=(max(x,na.rm=TRUE)-min(x,na.rm=TRUE)))))
+
+last_visit <- c(
+  "SN_SEECHILD",
+  "SN_SEESIB",
+  "SN_SEEREL",
+  "SN_SEEFRND",
+  "SN_SEENEIBR"
+)
+
+last_visit_recode <- function(x) (recode(x,
+                                         `1`=0,
+                                         `2`=2,
+                                         `3`=4,
+                                         `4`=6,
+                                         `5`=8,
+                                         `6`=10,
+                                         `7`=10)) 
+
+MOS_social_support <- c(
+  "SSA_DPTNG",
+  "SSA_DPAFF",
+  "SSA_DPSOC",
+  "SSA_DPEMO"
+)
+
+SO <- c("community_participation_avg",
+        "social_network_avg","last_visit_avg",
+        "SDC_MRTL","SN_LIVH_NB")
+```
+
+
+# 6) Finalizing Data Subsets
+
+```{r}
+#Comprehensive data (Baseline)
+Comp_reduced_BL <- Comprehensive_BL %>% 
+  full_join(Comprehensive_BL_FSA) %>% 
+  setNames(gsub("^CCC_|^DIA_|_COM$|_com$","",names(.))) %>% 
+  mutate_at(all_of(arthritis_comp),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(arthritis_comp),~recode(.,`2` = 0)) %>% 
+  rowwise() %>% 
+  mutate(ATHR_TOT = sum(across(all_of(arthritis_comp)),na.rm=F)
+  ) %>% 
+  ungroup() %>% 
+  mutate(ATHR = ifelse(ATHR_TOT>0,1,0)) %>% 
+  select(all_of(covariates),
+         all_of(cognition),
+         all_of(culture),
+         all_of(activity),
+         all_of(SII_items),
+         all_of(mood_and_pp),
+         all_of(canue),
+         all_of(phys_cond),
+         all_of(ment_cond),
+         all_of(social_support_items)
+  ) %>% 
+  mutate(Source = "Comprehensive",
+         Timepoint = "Baseline") %>% 
+  left_join(.,Weights_BL,by="entity_id") %>% 
+  #replace missing value codes
+  mutate(ALC_FREQ=ifelse(!ALC_FREQ%in%c("98","99","77"), #Code Don't Known, Refused, and Missing as NA
+                         as.numeric(ALC_FREQ),NA)) %>% 
+  mutate(ALC_FREQ=ifelse(ALC_FREQ==96,8,ALC_FREQ)) %>% #Code "Never" as 8
+  mutate_at(vars(canue),~replace(.,.%in%c(-8888,-9999),NA)) %>% 
+  mutate_at(vars(matches("^PA2_")),~replace(.,.%in%c(8,9,777,998,999),NA)) %>% 
+  mutate_at(vars(matches("^SSA_")),~replace(.,.%in%c(-8,8,9,999.99),NA)) %>% 
+  mutate_at(vars(matches("^ADL_")),~replace(.,.%in%c(9),NA)) %>% 
+  mutate_at(vars(matches("^SPA_")),~replace(.,.%in%c(8,9),NA)) %>% 
+  mutate_at(vars(matches("^SN_SEE_")),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(Network1_items),~replace(.,.%in%c(98,99),NA)) %>% 
+  mutate_at(all_of(Network2_items),~replace(.,.%in%c(998,999),NA)) %>% 
+  mutate_at(all_of(physper_items),~replace(.,.%in%c(-88),NA)) %>% 
+  mutate_at(all_of(MISC_items),~replace(.,.%in%c(7,8,9,-8,-88,99),NA)) %>% 
+  mutate_at(all_of(MISC2_items),~replace(.,.%in%c(99),NA)) %>% 
+  mutate_at(vars(starts_with("GEN_")),~replace(.,.%in%c(8,9),NA)) %>% 
+  mutate(DEP_CESD10 = replace(DEP_CESD10,DEP_CESD10%in%c(-88,99),NA)) %>% 
+  mutate(HWT_DBMI = replace(HWT_DBMI,HWT_DBMI%in%c(999.96,999.99),NA)) %>% 
+  mutate_at(all_of(phys_cond),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(ment_cond),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(phys_cond),~recode(.,`2` = 0)) %>% 
+  mutate_at(all_of(ment_cond),~recode(.,`2` = 0)) %>% 
+  #compute PASE scores
+  mutate_at(all_of(frequency_items),
+            frequency_recode) %>% 
+  mutate_at(all_of(hours_items),
+            hours_recode) %>% 
+  mutate_at(all_of(binary_items),
+            binary_recode) %>% 
+  mutate(Q2=ifelse(PA2_WALK_MCQ!=0,PA2_WALK_MCQ*PA2_WALKHR_MCQ/7,0),
+         Q3=ifelse(PA2_LSPRT_MCQ!=0,PA2_LSPRT_MCQ*PA2_LSPRTHR_MCQ/7,0),
+         Q4=ifelse(PA2_MSPRT_MCQ!=0,PA2_MSPRT_MCQ*PA2_MSPRTHR_MCQ/7,0),
+         Q5=ifelse(PA2_SSPRT_MCQ!=0,PA2_SSPRT_MCQ*PA2_SSPRTHR_MCQ/7,0),
+         Q6=ifelse(PA2_EXER_MCQ!=0,PA2_EXER_MCQ*PA2_EXERHR_MCQ/7,0),
+         Q10=ifelse(PA2_WRK_MCQ==2,0,
+                    ifelse(PA2_WRKPA_MCQ==1,0,
+                           ifelse(PA2_WRKPA_MCQ>=2,PA2_WRKHRS_NB_MCQ/7,NA))),
+         PASE_total = 20*Q2 +21*Q3 +23*(Q4+Q5) + 30*Q6 + 
+           25*(PA2_LTHSWK_MCQ+PA2_HVYHSWK_MCQ) + 
+           30*PA2_HMREPAIR_MCQ + 36*PA2_HVYODA_MCQ + 20*PA2_LTODA_MCQ +
+           35*PA2_CRPRSN_MCQ + 21*Q10) %>% 
+  #compute SII scores
+  mutate_at(all_of(community_participation),
+            community_participation_recode) %>% 
+  mutate_at(all_of(last_visit),
+            last_visit_recode) %>% 
+  mutate(SDC_MRTL=ifelse(SDC_MRTL==2,0,10),
+         SN_LIVH_NB=ifelse(SN_LIVH_NB>=1,10,0),
+         DEP_LONLY=recode(DEP_LONLY,
+                          `1`=10,
+                          `2`=6.67,
+                          `3`=3.33,
+                          `4`=0),
+         SPA_MORAC=recode(SPA_MORAC,
+                          `1`=0,
+                          `2`=10)
+  ) %>% 
+  mutate_at(all_of(c(network_quantity,MOS_social_support)),network_rescale) %>% 
+  mutate_at(c("no2_1yr","o3_1yr","pm25_1yr","so2_1yr"),list(scale = scale)) %>% 
+  mutate(social_support_avg = rowMeans(select(.,all_of(social_support_items)),na.rm=TRUE),
+         community_participation_avg = rowMeans(select(.,all_of(community_participation)),na.rm=TRUE),
+         social_network_avg = rowMeans(select(.,all_of(network_quantity)),na.rm=TRUE),
+         last_visit_avg = rowMeans(select(.,all_of(last_visit)),na.rm=TRUE),
+         functional_objective = rowMeans(select(.,all_of(MOS_social_support)),na.rm=TRUE),
+         functional_subjective = rowMeans(select(.,c("DEP_LONLY","SPA_MORAC")),na.rm=TRUE),
+         Air_pollution = rowMeans(select(.,c("no2_1yr_scale","o3_1yr_scale","pm25_1yr_scale","so2_1yr_scale")),na.rm=TRUE)
+  ) %>% 
+  mutate(S_O = rowMeans(select(.,SO),na.rm=TRUE)) %>% 
+  mutate(SII = rowMeans(select(.,c("S_O","functional_objective","functional_subjective")),na.rm=TRUE)) %>% 
+  #Create Guralnik 2006 Aggregate performance scale
+  mutate(Adjusted_GRIP=GS_EXAM_MAX/HGT_HEIGHT_M,
+         agebin=cut(AGE_NMBR,breaks=c(45,50,55,60,65,70,75,80,85,90),right=FALSE,labels=FALSE)
+  ) %>% 
+  group_by(agebin,SEX_ASK) %>% 
+  mutate(GS_99 = quantile(Adjusted_GRIP,probs=c(0.99),na.rm=TRUE),
+         CR_99 = quantile(CR_TIME,probs=c(0.99),na.rm=TRUE),
+         BAL_99 = quantile(BAL_BEST,probs=c(0.99),na.rm=TRUE),
+         Rescaled_GRIP=Adjusted_GRIP/GS_99,
+         Rescaled_chair=1-(CR_TIME)/CR_99,
+         Rescaled_balance=BAL_BEST/BAL_99) %>% 
+  ungroup() %>% 
+  mutate(Rescaled_GRIP=ifelse(Rescaled_GRIP>1,1,Rescaled_GRIP),
+         Rescaled_balance=ifelse(Rescaled_balance>1,1,Rescaled_balance),
+         Rescaled_chair=ifelse(Rescaled_chair<0|CR_NB<5,0,Rescaled_chair),
+         Physical_performance=Rescaled_GRIP+Rescaled_chair+Rescaled_balance
+  ) %>% 
+  rowwise() %>% 
+  mutate(Chronic = sum(across(all_of(phys_cond)),na.rm=F)
+  ) %>% 
+  ungroup()
+
+
+#Comprehensive data (Follow-up)
+Comp_reduced_FU1 <- Comprehensive_FU1 %>% 
+  full_join(Comprehensive_FU1_FSA) %>% 
+  setNames(gsub("_COF1$","",names(.))) %>% 
+  select(#covariates
+    entity_id,
+    SDC_FSA,
+    SDC_URBAN_RURAL,
+    OWN_DWLG,
+    AGE_NMBR,
+    startlanguage,
+    all_of(cognition)
+  ) %>% 
+  mutate(Source = "Comprehensive",
+         Timepoint = "FU1") %>% 
+  left_join(.,Weights_BL,by="entity_id") %>% 
+  mutate_at(all_of(cognition),~replace(.,.<0,NA))
+
+
+#Tracking Data (Baseline)
+Track_reduced_BL <- Tracking_BL %>% 
+  full_join(Tracking_BL_FSA) %>% 
+  setNames(gsub("^CCT_|_TRM$|_trm$","",names(.))) %>% 
+  mutate_at(all_of(arthritis_track),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(arthritis_track),~recode(.,`2` = 0)) %>% 
+  rowwise() %>% 
+  mutate(ATHR_TOT = sum(across(all_of(arthritis_track)),na.rm=F),
+  ) %>% 
+  ungroup() %>% 
+  mutate(ATHR = ifelse(ATHR_TOT>0,1,0)) %>% 
+  select(all_of(covariates),
+         all_of(cognition),
+         all_of(culture),
+         all_of(activity),
+         all_of(SII_items),
+         all_of(canue),
+         all_of(phys_cond),
+         all_of(ment_cond),
+         all_of(social_support_items),
+         DEP_CESD10
+  ) %>% 
+  mutate(Source = "Tracking",
+         Timepoint = "Baseline") %>% 
+  left_join(.,Weights_BL,by="entity_id") %>% 
+  #replace missing value codes
+  mutate(ALC_FREQ=ifelse(!ALC_FREQ%in%c("98","99","77"), #Code Don't Known, Refused, and Missing as NA
+                         as.numeric(ALC_FREQ),NA)) %>% 
+  mutate(ALC_FREQ=ifelse(ALC_FREQ==96,8,ALC_FREQ)) %>% #Code "Never" as 8
+  mutate_at(vars(canue),~replace(.,.%in%c(-8888,-9999),NA)) %>% 
+  mutate_at(vars(matches("^PA2_")),~replace(.,.%in%c(8,9,777,998,999),NA)) %>% 
+  mutate_at(vars(matches("^SSA_")),~replace(.,.%in%c(-8,8,9,999.99),NA)) %>% 
+  mutate_at(vars(matches("^ADL_")),~replace(.,.%in%c(9),NA)) %>% 
+  mutate_at(vars(matches("^SPA_")),~replace(.,.%in%c(8,9),NA)) %>% 
+  mutate_at(vars(matches("^SN_SEE_")),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(Network1_items),~replace(.,.%in%c(98,99),NA)) %>% 
+  mutate_at(all_of(Network2_items),~replace(.,.%in%c(998,999),NA)) %>% 
+  mutate_at(all_of(MISC_items),~replace(.,.%in%c(7,8,9,-8,-88,99),NA)) %>% 
+  mutate_at(all_of(MISC2_items),~replace(.,.%in%c(99),NA)) %>% 
+  mutate(DEP_CESD10 = replace(DEP_CESD10,DEP_CESD10%in%c(-88,99),NA)) %>% 
+  mutate(HWT_DBMI = replace(HWT_DBMI,HWT_DBMI%in%c(999.96,999.99),NA)) %>% 
+  mutate_at(all_of(phys_cond),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(ment_cond),~replace(.,.%in%c(8,9),NA)) %>%
+  mutate_at(all_of(phys_cond),~recode(.,`2` = 0)) %>% 
+  mutate_at(all_of(ment_cond),~recode(.,`2` = 0)) %>% 
+  #compute PASE scores
+  mutate_at(all_of(frequency_items),
+            frequency_recode) %>% 
+  mutate_at(all_of(hours_items),
+            hours_recode) %>% 
+  mutate_at(all_of(binary_items),
+            binary_recode) %>% 
+  mutate(Q2=ifelse(PA2_WALK_MCQ!=0,PA2_WALK_MCQ*PA2_WALKHR_MCQ/7,0),
+         Q3=ifelse(PA2_LSPRT_MCQ!=0,PA2_LSPRT_MCQ*PA2_LSPRTHR_MCQ/7,0),
+         Q4=ifelse(PA2_MSPRT_MCQ!=0,PA2_MSPRT_MCQ*PA2_MSPRTHR_MCQ/7,0),
+         Q5=ifelse(PA2_SSPRT_MCQ!=0,PA2_SSPRT_MCQ*PA2_SSPRTHR_MCQ/7,0),
+         Q6=ifelse(PA2_EXER_MCQ!=0,PA2_EXER_MCQ*PA2_EXERHR_MCQ/7,0),
+         Q10=ifelse(PA2_WRK_MCQ==2,0,
+                    ifelse(PA2_WRKPA_MCQ==1,0,
+                           ifelse(PA2_WRKPA_MCQ>=2,PA2_WRKHRS_NB_MCQ/7,NA))),
+         PASE_total = 20*Q2 +21*Q3 +23*(Q4+Q5) + 30*Q6 + 
+           25*(PA2_LTHSWK_MCQ+PA2_HVYHSWK_MCQ) + 
+           30*PA2_HMREPAIR_MCQ + 36*PA2_HVYODA_MCQ + 20*PA2_LTODA_MCQ +
+           35*PA2_CRPRSN_MCQ + 21*Q10) %>% 
+  #compute SII scores
+  mutate_at(all_of(community_participation),
+            community_participation_recode) %>% 
+  mutate_at(all_of(last_visit),
+            last_visit_recode) %>% 
+  mutate(SDC_MRTL=ifelse(SDC_MRTL==2,0,10),
+         SN_LIVH_NB=ifelse(SN_LIVH_NB>=1,10,0),
+         DEP_LONLY=recode(DEP_LONLY,
+                          `1`=10,
+                          `2`=6.67,
+                          `3`=3.33,
+                          `4`=0),
+         SPA_MORAC=recode(SPA_MORAC,
+                          `1`=0,
+                          `2`=10)
+  ) %>% 
+  mutate_at(all_of(c(network_quantity,MOS_social_support)),network_rescale) %>% 
+  mutate_at(c("no2_1yr","o3_1yr","pm25_1yr","so2_1yr"),list(scale = scale)) %>% 
+  mutate(social_support_avg = rowMeans(select(.,all_of(social_support_items)),na.rm=TRUE),
+         community_participation_avg = rowMeans(select(.,all_of(community_participation)),na.rm=TRUE),
+         social_network_avg = rowMeans(select(.,all_of(network_quantity)),na.rm=TRUE),
+         last_visit_avg = rowMeans(select(.,all_of(last_visit)),na.rm=TRUE),
+         functional_objective = rowMeans(select(.,all_of(MOS_social_support)),na.rm=TRUE),
+         functional_subjective = rowMeans(select(.,c("DEP_LONLY","SPA_MORAC")),na.rm=TRUE),
+         Air_pollution = rowMeans(select(.,c("no2_1yr_scale","o3_1yr_scale","pm25_1yr_scale","so2_1yr_scale")),na.rm=TRUE)
+  ) %>% 
+  mutate(S_O = rowMeans(select(.,SO),na.rm=TRUE)) %>% 
+  mutate(SII = rowMeans(select(.,c("S_O","functional_objective","functional_subjective")),na.rm=TRUE)) %>% 
+  rowwise() %>% 
+  mutate(Chronic = sum(across(all_of(phys_cond)),na.rm=F)
+  ) %>% 
+  ungroup()
+
+
+
+#Tracking data (Follow-up)
+Track_reduced_FU1 <- Tracking_FU1 %>% 
+  full_join(Tracking_FU1_FSA) %>% 
+  setNames(gsub("_TRF1$","",names(.))) %>% 
+  select(#covariates
+    entity_id,
+    SDC_FSA,
+    SDC_URBAN_RURAL,
+    OWN_DWLG,
+    AGE_NMBR,
+    startlanguage,
+    all_of(cognition)
+  ) %>% 
+  mutate(Source = "Tracking",
+         Timepoint = "FU1") %>% 
+  left_join(.,Weights_BL,by="entity_id") %>% 
+  mutate_at(vars(cognition),~replace(.,.<0,NA))
+
+
+#Combine Tracking and Comprehensive Cohorts
+Combined_BL <- bind_rows(Comp_reduced_BL,Track_reduced_BL)
+Combined_FU1 <- bind_rows(Comp_reduced_FU1,Track_reduced_FU1)
+
+Combined_wide <- full_join(Combined_BL,Combined_FU1,by="entity_id")
+
+Mover_IDS <- Combined_wide$entity_id[(Combined_wide$SDC_FSA.x==Combined_wide$SDC_FSA.y)==FALSE] 
+Mover_IDS <- Mover_IDS[!is.na(Mover_IDS)]
+
+Combined <- Combined_BL %>% 
+  mutate(OWN_DWLG = as.numeric(OWN_DWLG)) %>% 
+  bind_rows(.,Comp_reduced_FU1) %>% 
+  bind_rows(.,Track_reduced_FU1) %>% 
+  group_by(entity_id) %>% 
+  fill(c(ED_UDR11,SMK_DSTY,ALC_FREQ,INC_TOT,HWT_DBMI,
+         SEX_ASK,DEP_CESD10,PASE_total,SII,Chronic,
+         community_participation_avg,social_network_avg,
+         last_visit_avg,functional_objective,
+         functional_subjective,S_O,
+         Adjusted_GRIP,Rescaled_balance,Rescaled_GRIP,
+         Rescaled_chair,Physical_performance,
+         Air_pollution,
+         starts_with("GEN_"),
+         starts_with("SDC_CULT")),
+       .direction="downup") %>% 
+  fill(all_of(canue),.direction="downup") %>% 
+  ungroup() %>% 
+  select(-starts_with("SN_"),
+         -starts_with("SPA_"),
+         -starts_with("PA2_"),
+         -starts_with("SSA_"),
+         -AGE_GRP,
+         -all_of(phys_cond),
+         -matches("Q\\d{1,2}"),
+         -all_of(physper_items),
+         -ends_with("_99")
+  )
+```
